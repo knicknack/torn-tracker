@@ -4,10 +4,11 @@
   h2 { font-size: 18px; font-weight: 500; margin: 24px 0 12px; border-bottom: 1px solid #d3d1c7; padding-bottom: 6px; }
   h3 { font-size: 15px; font-weight: 500; margin: 16px 0 8px; }
   .subtitle { color: #5f5e5a; font-size: 14px; margin-bottom: 12px; }
-  .api-status { font-size: 12px; padding: 6px 10px; border-radius: 4px; display: inline-block; margin-bottom: 16px; }
-  .api-status.connected { background: #EAF3DE; color: #27500A; }
-  .api-status.disconnected { background: #FAEEDA; color: #633806; }
-  .api-status.error { background: #FCEBEB; color: #791F1F; }
+  .status-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .status-chip { font-size: 12px; padding: 4px 10px; border-radius: 4px; display: inline-block; }
+  .status-chip.good { background: #EAF3DE; color: #27500A; }
+  .status-chip.warn { background: #FAEEDA; color: #633806; }
+  .status-chip.bad { background: #FCEBEB; color: #791F1F; }
   .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #d3d1c7; flex-wrap: wrap; }
   .tab { padding: 10px 16px; cursor: pointer; border: none; background: transparent; font-size: 14px; font-family: inherit; color: #5f5e5a; border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .tab.active { color: #2a2a28; border-bottom-color: #534AB7; font-weight: 500; }
@@ -19,12 +20,13 @@
   input:focus, select:focus, textarea:focus { outline: none; border-color: #534AB7; }
   button { background: #534AB7; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 14px; }
   button:hover { background: #3C3489; }
+  button:disabled { background: #B4B2A9; cursor: not-allowed; }
   button.secondary { background: #e8e7e0; color: #2a2a28; }
   button.secondary:hover { background: #d3d1c7; }
   button.danger { background: transparent; color: #A32D2D; padding: 4px 8px; font-size: 12px; }
   button.danger:hover { background: #FCEBEB; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; padding: 8px; background: #f5f5f0; border-bottom: 1px solid #d3d1c7; font-weight: 500; color: #5f5e5a; cursor: pointer; user-select: none; }
+  th { text-align: left; padding: 8px; background: #f5f5f0; border-bottom: 1px solid #d3d1c7; font-weight: 500; color: #5f5e5a; cursor: pointer; user-select: none; white-space: nowrap; }
   th:hover { background: #eeece5; }
   td { padding: 8px; border-bottom: 1px solid #e8e7e0; }
   tr:hover td { background: #faf9f5; }
@@ -51,19 +53,23 @@
   .stock-good { color: #27500A; font-weight: 500; }
   .stock-low { color: #BA7517; }
   .stock-empty { color: #A32D2D; }
-  .filter-bar { display: flex; gap: 12px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+  .filter-bar { display: flex; gap: 12px; margin-bottom: 12px; align-items: flex-end; flex-wrap: wrap; }
   .filter-bar label { margin-bottom: 0; }
+  .filter-bar > div { min-width: 120px; }
   .filter-bar input, .filter-bar select { width: auto; }
-  .loading { opacity: 0.5; pointer-events: none; }
   .api-setup { background: #faf9f5; padding: 16px; border-radius: 8px; border: 1px solid #d3d1c7; margin-bottom: 20px; }
   .toast { position: fixed; bottom: 20px; right: 20px; background: #2a2a28; color: white; padding: 10px 16px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 1000; }
   .toast.show { opacity: 1; }
   code { background: #F1EFE8; padding: 1px 4px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; }
+  .data-source-note { font-size: 12px; color: #888780; padding: 8px 12px; background: #faf9f5; border-radius: 6px; margin-bottom: 12px; }
 </style>
 
 <h1>Torn Travel Tracker</h1>
 <p class="subtitle">Live stock · restock predictions · flight planner · profit history</p>
-<div id="api-status" class="api-status disconnected">No API key — add one in Settings to enable live stock</div>
+<div class="status-bar">
+  <span id="yata-status" class="status-chip warn">YATA: not loaded</span>
+  <span id="torn-status" class="status-chip warn">Torn API: no key</span>
+</div>
 
 <div class="tabs">
   <button class="tab active" data-tab="live">Live stock</button>
@@ -75,32 +81,36 @@
 </div>
 
 <div id="live" class="panel active">
+  <div class="data-source-note">
+    Stock data from <strong>YATA</strong> (community-maintained, updated when players land abroad). Market prices from <strong>Torn's API</strong>. YATA caches for 5 minutes to respect their 10-call/hour rate limit.
+  </div>
   <div class="filter-bar">
-    <button onclick="refreshLiveStock()" id="refresh-btn">Refresh live stock</button>
-    <label>Sort by:
+    <button onclick="refreshAll()" id="refresh-btn">Refresh data</button>
+    <div>
+      <label>Sort by</label>
       <select id="live-sort" onchange="renderLiveStock()">
         <option value="profit">Profit/hour</option>
         <option value="stock">Stock level</option>
         <option value="total">Total profit</option>
         <option value="country">Country</option>
       </select>
-    </label>
-    <label>Min stock:
-      <input type="number" id="live-min-stock" value="0" style="width:80px" onchange="renderLiveStock()" />
-    </label>
-    <label>Capacity:
-      <input type="number" id="live-capacity" value="19" style="width:60px" onchange="renderLiveStock()" />
-    </label>
-    <label>Show:
-      <select id="live-type" onchange="renderLiveStock()">
-        <option value="all">All items</option>
-        <option value="plushie">Plushies only</option>
-        <option value="flower">Flowers only</option>
-        <option value="drug">Drugs</option>
+    </div>
+    <div>
+      <label>Min stock</label>
+      <input type="number" id="live-min-stock" value="0" style="width:90px" onchange="renderLiveStock()" />
+    </div>
+    <div>
+      <label>Capacity</label>
+      <input type="number" id="live-capacity" value="19" style="width:80px" onchange="renderLiveStock()" />
+    </div>
+    <div>
+      <label>Country</label>
+      <select id="live-country" onchange="renderLiveStock()">
+        <option value="all">All countries</option>
       </select>
-    </label>
+    </div>
   </div>
-  <p class="hint" id="last-refresh">Last refreshed: never</p>
+  <p class="hint" id="last-refresh">No data yet</p>
   <div id="live-table-container"></div>
 </div>
 
@@ -113,7 +123,7 @@
 
 <div id="log" class="panel">
   <h3>Log an observation</h3>
-  <p class="section-desc">Your observations feed the prediction engine. Log especially when you see a full restock or sold-out shop.</p>
+  <p class="section-desc">Your observations feed the prediction engine. Log full restocks and sold-out events especially.</p>
   <div class="form-row">
     <div><label>Destination</label><select id="log-dest"></select></div>
     <div><label>Item</label><input type="text" id="log-item" placeholder="e.g. Camel Plushie" /></div>
@@ -139,7 +149,7 @@
 
 <div id="planner" class="panel">
   <h3>Plan a flight</h3>
-  <p class="section-desc">Work backwards from a target arrival time. Pulls live stock if API is connected.</p>
+  <p class="section-desc">Work backwards from a target arrival time.</p>
   <div class="form-row">
     <div><label>Destination</label><select id="plan-dest"></select></div>
     <div><label>Target arrival</label><input type="datetime-local" id="plan-target" /></div>
@@ -179,9 +189,9 @@ PlyBur's window (~06:00–13:00 PDT = his 15:00–22:00 SAST)
 </div>
 
 <div id="settings" class="panel">
-  <h3>Torn API</h3>
+  <h3>Torn API (optional — for market prices)</h3>
   <div class="api-setup">
-    <p class="section-desc" style="margin-top:0">Your API key is stored only in this browser's local storage — never sent anywhere except directly to Torn. Use a <strong>Public</strong> access key, which only exposes public game data. Get one at <code>torn.com</code> → Settings → API Key.</p>
+    <p class="section-desc" style="margin-top:0">A Public-level API key gives us current market prices for profit calculations in the Live Stock tab. Get one at <code>torn.com</code> → Settings → API Key. Key stored only in your browser.</p>
     <div class="form-row">
       <div>
         <label>API key (16 characters)</label>
@@ -189,7 +199,7 @@ PlyBur's window (~06:00–13:00 PDT = his 15:00–22:00 SAST)
       </div>
       <div>
         <label>&nbsp;</label>
-        <button onclick="saveApiKey()">Save key & test</button>
+        <button onclick="saveApiKey()">Save & test</button>
       </div>
     </div>
     <button class="secondary" onclick="clearApiKey()">Remove key</button>
@@ -221,32 +231,38 @@ PlyBur's window (~06:00–13:00 PDT = his 15:00–22:00 SAST)
   <input type="file" id="import-file" style="display:none" onchange="handleImport(event)" accept=".json" />
 
   <h3 style="margin-top:28px">About</h3>
-  <p class="section-desc">Restock predictions use the community heuristic (sell-out ÷ 2, rounded to 15-min tick). Live stock pulled directly from Torn's public API. All personal data stays in this browser.</p>
+  <p class="section-desc">
+    Foreign stock data is crowd-sourced from YATA (the same source TornPDA, TornTools, and torntravel use). YATA's rate limit is 10 calls per hour per IP — this tool caches data for 5 minutes. Restock predictions use the community heuristic (sell-out ÷ 2, rounded to 15-min tick). All your personal data stays in this browser.
+  </p>
 </div>
 
 <div id="toast" class="toast"></div>
 
 <script>
 const DESTINATIONS = [
-  { name: 'Mexico', standardMin: 26, code: 'mexico' },
-  { name: 'Cayman Islands', standardMin: 35, code: 'cayman' },
-  { name: 'Canada', standardMin: 41, code: 'canada' },
-  { name: 'Hawaii', standardMin: 134, code: 'hawaii' },
-  { name: 'United Kingdom', standardMin: 159, code: 'united kingdom' },
-  { name: 'Argentina', standardMin: 167, code: 'argentina' },
-  { name: 'Switzerland', standardMin: 175, code: 'switzerland' },
-  { name: 'Japan', standardMin: 225, code: 'japan' },
-  { name: 'China', standardMin: 242, code: 'china' },
-  { name: 'United Arab Emirates', standardMin: 271, code: 'uae' },
-  { name: 'South Africa', standardMin: 297, code: 'south africa' }
+  { name: 'Mexico', standardMin: 26, yataCodes: ['mex', 'mexico'] },
+  { name: 'Cayman Islands', standardMin: 35, yataCodes: ['cay', 'cayman', 'cayman islands'] },
+  { name: 'Canada', standardMin: 41, yataCodes: ['can', 'canada'] },
+  { name: 'Hawaii', standardMin: 134, yataCodes: ['haw', 'hawaii'] },
+  { name: 'United Kingdom', standardMin: 159, yataCodes: ['uni', 'uk', 'united kingdom'] },
+  { name: 'Argentina', standardMin: 167, yataCodes: ['arg', 'argentina'] },
+  { name: 'Switzerland', standardMin: 175, yataCodes: ['swi', 'switzerland'] },
+  { name: 'Japan', standardMin: 225, yataCodes: ['jap', 'japan'] },
+  { name: 'China', standardMin: 242, yataCodes: ['chi', 'china'] },
+  { name: 'United Arab Emirates', standardMin: 271, yataCodes: ['uae', 'united arab emirates'] },
+  { name: 'South Africa', standardMin: 297, yataCodes: ['sou', 'south africa'] }
 ];
+
+const YATA_CACHE_MINUTES = 5;
 
 let state = {
   observations: [],
   flights: [],
   settings: { tzOffset: -7, travelMethod: 0.7, apiKey: '' },
-  liveStock: null,
-  liveStockTime: null
+  yataData: null,
+  yataFetchedAt: null,
+  itemsData: null,
+  itemsFetchedAt: null
 };
 
 function load() {
@@ -271,6 +287,8 @@ function populateDestDropdowns() {
     const sel = document.getElementById(id);
     sel.innerHTML = DESTINATIONS.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
   });
+  const countrySel = document.getElementById('live-country');
+  countrySel.innerHTML = '<option value="all">All countries</option>' + DESTINATIONS.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
 }
 
 function initSettings() {
@@ -278,36 +296,54 @@ function initSettings() {
   document.getElementById('travel-method').value = state.settings.travelMethod;
   if (state.settings.apiKey) {
     document.getElementById('api-key').value = state.settings.apiKey;
-    updateApiStatus('connected', 'API key set — ready to fetch live stock');
+    setTornStatus('good', 'Torn API: key set');
   }
+  updateYataStatus();
 }
 
-function updateApiStatus(status, msg) {
-  const el = document.getElementById('api-status');
-  el.className = `api-status ${status}`;
+function setTornStatus(level, msg) {
+  const el = document.getElementById('torn-status');
+  el.className = `status-chip ${level}`;
   el.textContent = msg;
+}
+
+function updateYataStatus() {
+  const el = document.getElementById('yata-status');
+  if (!state.yataFetchedAt) {
+    el.className = 'status-chip warn';
+    el.textContent = 'YATA: not loaded';
+    return;
+  }
+  const ageMin = (Date.now() - new Date(state.yataFetchedAt)) / 60000;
+  if (ageMin < YATA_CACHE_MINUTES) {
+    el.className = 'status-chip good';
+    el.textContent = `YATA: fresh (${Math.round(ageMin)}m ago)`;
+  } else {
+    el.className = 'status-chip warn';
+    el.textContent = `YATA: stale (${Math.round(ageMin)}m ago)`;
+  }
 }
 
 async function saveApiKey() {
   const key = document.getElementById('api-key').value.trim();
   if (!key) { toast('Enter a key first'); return; }
   if (key.length !== 16) { toast('Torn keys are 16 characters'); return; }
-  updateApiStatus('disconnected', 'Testing key...');
+  setTornStatus('warn', 'Torn API: testing...');
   try {
     const resp = await fetch(`https://api.torn.com/key/?selections=info&key=${key}`);
     const data = await resp.json();
     if (data.error) {
-      updateApiStatus('error', `Key error: ${data.error.error}`);
+      setTornStatus('bad', `Torn API error: ${data.error.error}`);
       toast('Key test failed');
       return;
     }
     state.settings.apiKey = key;
     save();
-    updateApiStatus('connected', `Connected (access level: ${data.access_level || 'public'})`);
+    setTornStatus('good', 'Torn API: connected');
     toast('API key saved');
-    refreshLiveStock();
+    refreshAll();
   } catch(e) {
-    updateApiStatus('error', 'Network error testing key');
+    setTornStatus('bad', 'Torn API: network error');
     toast('Network error');
   }
 }
@@ -316,109 +352,204 @@ function clearApiKey() {
   state.settings.apiKey = '';
   save();
   document.getElementById('api-key').value = '';
-  updateApiStatus('disconnected', 'No API key');
+  setTornStatus('warn', 'Torn API: no key');
   toast('Key removed');
 }
 
-async function refreshLiveStock() {
-  if (!state.settings.apiKey) { toast('Add an API key in Settings first'); return; }
+async function fetchYataStock() {
+  if (state.yataData && state.yataFetchedAt) {
+    const ageMin = (Date.now() - new Date(state.yataFetchedAt)) / 60000;
+    if (ageMin < YATA_CACHE_MINUTES) {
+      toast(`Cached YATA data (${Math.round(ageMin)}m old)`);
+      return true;
+    }
+  }
+  try {
+    const resp = await fetch('https://yata.yt/api/v1/travel/export/');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    state.yataData = data;
+    state.yataFetchedAt = new Date().toISOString();
+    save();
+    return true;
+  } catch(e) {
+    console.error('YATA fetch error:', e);
+    toast('YATA fetch failed: ' + e.message);
+    return false;
+  }
+}
+
+async function fetchTornItems() {
+  if (!state.settings.apiKey) return false;
+  if (state.itemsData && state.itemsFetchedAt) {
+    const ageMin = (Date.now() - new Date(state.itemsFetchedAt)) / 60000;
+    if (ageMin < 60) return true;
+  }
+  try {
+    const resp = await fetch(`https://api.torn.com/torn/?selections=items&key=${state.settings.apiKey}`);
+    const data = await resp.json();
+    if (data.error) { console.error('Torn items error:', data.error); return false; }
+    state.itemsData = data.items;
+    state.itemsFetchedAt = new Date().toISOString();
+    save();
+    return true;
+  } catch(e) {
+    console.error('Torn items fetch error:', e);
+    return false;
+  }
+}
+
+async function refreshAll() {
   const btn = document.getElementById('refresh-btn');
   btn.textContent = 'Refreshing...';
   btn.disabled = true;
-  try {
-    const [stocksResp, itemsResp] = await Promise.all([
-      fetch(`https://api.torn.com/torn/?selections=travelstocks&key=${state.settings.apiKey}`),
-      fetch(`https://api.torn.com/torn/?selections=items&key=${state.settings.apiKey}`)
-    ]);
-    const stocksData = await stocksResp.json();
-    const itemsData = await itemsResp.json();
-    if (stocksData.error) { toast('Stock API error: ' + stocksData.error.error); btn.textContent = 'Refresh live stock'; btn.disabled = false; return; }
-    state.liveStock = { stocks: stocksData.travelstocks || stocksData.stocks, items: itemsData.items || {} };
-    state.liveStockTime = new Date().toISOString();
-    save();
-    document.getElementById('last-refresh').textContent = `Last refreshed: ${new Date().toLocaleTimeString()}`;
+  const yataOk = await fetchYataStock();
+  if (state.settings.apiKey) await fetchTornItems();
+  updateYataStatus();
+  if (yataOk) {
+    document.getElementById('last-refresh').textContent = `YATA data fetched: ${new Date(state.yataFetchedAt).toLocaleString()}`;
     renderLiveStock();
-    toast('Stock refreshed');
-  } catch(e) {
-    toast('Fetch failed: ' + e.message);
-    console.error(e);
+    toast('Data refreshed');
   }
-  btn.textContent = 'Refresh live stock';
+  btn.textContent = 'Refresh data';
   btn.disabled = false;
+}
+
+function findDestination(key) {
+  const k = (key || '').toLowerCase().trim();
+  return DESTINATIONS.find(d => d.yataCodes.some(c => c === k || k.startsWith(c) || c.startsWith(k)));
+}
+
+function extractStockRows() {
+  const rows = [];
+  if (!state.yataData) return rows;
+
+  // YATA has had several response shapes over time. Try to handle whatever we get.
+  // Shape 1: { stocks: { <country>: { update, stocks: { <item_id>: {...} } } } }
+  // Shape 2: { <country>: { items: [...] } }
+  // Shape 3: { <country>: { stocks: {...} } }
+  let stocksRoot = state.yataData.stocks || state.yataData;
+
+  for (const countryKey in stocksRoot) {
+    const entry = stocksRoot[countryKey];
+    if (!entry || typeof entry !== 'object') continue;
+    const dest = findDestination(countryKey);
+    if (!dest) continue;
+    const countryName = dest.name;
+
+    // Find the item list: could be entry.stocks (object), entry.items (array), or entry itself
+    let itemSource = entry.stocks || entry.items || entry;
+    if (!itemSource || typeof itemSource !== 'object') continue;
+
+    // Handle array form (items array)
+    if (Array.isArray(itemSource)) {
+      for (const item of itemSource) {
+        addRow(rows, countryName, item.id, item, entry);
+      }
+    } else {
+      // Object form (keyed by item id)
+      for (const itemId in itemSource) {
+        const item = itemSource[itemId];
+        if (!item || typeof item !== 'object') continue;
+        addRow(rows, countryName, itemId, item, entry);
+      }
+    }
+  }
+  return rows;
+}
+
+function addRow(rows, countryName, itemId, item, countryEntry) {
+  const quantity = item.quantity !== undefined ? item.quantity : (item.stock !== undefined ? item.stock : 0);
+  const cost = item.cost !== undefined ? item.cost : (item.price !== undefined ? item.price : 0);
+  const itemInfo = (state.itemsData && state.itemsData[itemId]) || {};
+  const itemName = itemInfo.name || item.name || `Item #${itemId}`;
+  const itemType = (itemInfo.type || item.type || '').toLowerCase();
+  const marketValue = itemInfo.market_value || item.market_value || 0;
+  rows.push({
+    country: countryName,
+    itemId: String(itemId),
+    itemName,
+    itemType,
+    stock: Number(quantity) || 0,
+    cost: Number(cost) || 0,
+    marketValue: Number(marketValue) || 0,
+    updatedAt: countryEntry.update || countryEntry.timestamp || null
+  });
 }
 
 function renderLiveStock() {
   const container = document.getElementById('live-table-container');
-  if (!state.liveStock) {
-    container.innerHTML = '<div class="empty-state">No live stock data yet. Click "Refresh live stock" above. (Requires API key in Settings.)</div>';
+  if (!state.yataData) {
+    container.innerHTML = '<div class="empty-state">Click "Refresh data" above to load foreign stock from YATA.</div>';
     return;
   }
+  const rows = extractStockRows();
+  if (rows.length === 0) {
+    container.innerHTML = `<div class="empty-state">
+      YATA returned data but no stock rows were parseable. The response shape may have changed.
+      <br><br>
+      <button class="secondary" onclick="showRawYata()">Show raw YATA response (for debugging)</button>
+    </div>`;
+    return;
+  }
+
   const sortBy = document.getElementById('live-sort').value;
   const minStock = parseInt(document.getElementById('live-min-stock').value) || 0;
   const capacity = parseInt(document.getElementById('live-capacity').value) || 19;
-  const typeFilter = document.getElementById('live-type').value;
+  const countryFilter = document.getElementById('live-country').value;
 
-  const rows = [];
-  const stocks = state.liveStock.stocks;
-  const items = state.liveStock.items;
+  const enriched = rows.map(r => {
+    const profitPerItem = r.marketValue - r.cost;
+    const totalProfit = profitPerItem * capacity;
+    const dest = DESTINATIONS.find(d => d.name === r.country);
+    const travelMin = dest ? Math.round(dest.standardMin * state.settings.travelMethod) : 0;
+    const hoursPerFlight = (travelMin * 2) / 60;
+    const profitPerHour = hoursPerFlight > 0 ? Math.round(totalProfit / hoursPerFlight) : 0;
+    return { ...r, profitPerItem, totalProfit, profitPerHour, travelMin };
+  }).filter(r => r.stock >= minStock && (countryFilter === 'all' || r.country === countryFilter));
 
-  for (const countryKey in stocks) {
-    const country = stocks[countryKey];
-    const countryName = country.country || countryKey;
-    const countryStock = country.stocks || [];
-    for (const itemEntry of countryStock) {
-      const itemId = itemEntry.id;
-      const itemInfo = items[itemId] || {};
-      const itemName = itemInfo.name || `Item #${itemId}`;
-      const itemType = (itemInfo.type || '').toLowerCase();
-      if (typeFilter !== 'all' && !itemType.includes(typeFilter)) continue;
-      const stockCount = itemEntry.quantity || 0;
-      if (stockCount < minStock) continue;
-      const buyPrice = itemEntry.cost || 0;
-      const marketValue = itemInfo.market_value || 0;
-      const profitPerItem = marketValue - buyPrice;
-      const totalProfit = profitPerItem * capacity;
-      const dest = DESTINATIONS.find(d => d.name.toLowerCase() === countryName.toLowerCase());
-      const travelMin = dest ? Math.round(dest.standardMin * state.settings.travelMethod) : 0;
-      const hoursPerFlight = (travelMin * 2) / 60;
-      const profitPerHour = hoursPerFlight > 0 ? Math.round(totalProfit / hoursPerFlight) : 0;
-      rows.push({ countryName, itemName, itemType, stockCount, buyPrice, marketValue, profitPerItem, totalProfit, profitPerHour, travelMin });
-    }
-  }
-
-  rows.sort((a, b) => {
+  enriched.sort((a, b) => {
     if (sortBy === 'profit') return b.profitPerHour - a.profitPerHour;
-    if (sortBy === 'stock') return b.stockCount - a.stockCount;
+    if (sortBy === 'stock') return b.stock - a.stock;
     if (sortBy === 'total') return b.totalProfit - a.totalProfit;
-    if (sortBy === 'country') return a.countryName.localeCompare(b.countryName) || b.profitPerHour - a.profitPerHour;
+    if (sortBy === 'country') return a.country.localeCompare(b.country) || b.profitPerHour - a.profitPerHour;
   });
 
-  if (rows.length === 0) {
-    container.innerHTML = '<div class="empty-state">No items match your filters. Try lowering min stock or changing category.</div>';
+  if (enriched.length === 0) {
+    container.innerHTML = '<div class="empty-state">No items match your filters. Try lowering min stock or changing country.</div>';
     return;
   }
 
+  const hasMarketData = state.itemsData !== null;
+
   container.innerHTML = `<table>
     <thead><tr>
-      <th>Country</th><th>Item</th><th>Stock</th><th>Buy</th><th>Market</th>
-      <th>Profit/item</th><th>Total (@ cap)</th><th>$/hr</th>
+      <th>Country</th><th>Item</th><th>Stock</th><th>Buy</th>
+      ${hasMarketData ? '<th>Market</th><th>Profit/item</th><th>Total (@ cap)</th><th>$/hr</th>' : '<th colspan="4" style="font-weight:400;color:#888780">Add Torn API key in Settings for profit calcs</th>'}
     </tr></thead>
-    <tbody>${rows.map(r => {
+    <tbody>${enriched.map(r => {
       let stockCls = 'stock-good';
-      if (r.stockCount === 0) stockCls = 'stock-empty';
-      else if (r.stockCount < 500) stockCls = 'stock-low';
+      if (r.stock === 0) stockCls = 'stock-empty';
+      else if (r.stock < 500) stockCls = 'stock-low';
+      const profitCell = hasMarketData
+        ? `<td class="num">$${fmt(r.marketValue)}</td><td class="num">$${fmt(r.profitPerItem)}</td><td class="num">$${fmt(r.totalProfit)}</td><td class="num">$${fmt(r.profitPerHour)}</td>`
+        : '<td colspan="4" style="color:#888780">—</td>';
       return `<tr>
-        <td>${r.countryName}</td>
+        <td>${r.country}</td>
         <td>${r.itemName}</td>
-        <td class="num ${stockCls}">${fmt(r.stockCount)}</td>
-        <td class="num">$${fmt(r.buyPrice)}</td>
-        <td class="num">$${fmt(r.marketValue)}</td>
-        <td class="num">$${fmt(r.profitPerItem)}</td>
-        <td class="num">$${fmt(r.totalProfit)}</td>
-        <td class="num">$${fmt(r.profitPerHour)}</td>
+        <td class="num ${stockCls}">${fmt(r.stock)}</td>
+        <td class="num">$${fmt(r.cost)}</td>
+        ${profitCell}
       </tr>`;
     }).join('')}</tbody>
   </table>`;
+}
+
+function showRawYata() {
+  const pre = document.createElement('pre');
+  pre.style.cssText = 'background:#2a2a28;color:#fff;padding:12px;border-radius:6px;overflow:auto;max-height:400px;font-size:11px';
+  pre.textContent = JSON.stringify(state.yataData, null, 2).slice(0, 5000) + '\n\n... (truncated)';
+  document.getElementById('live-table-container').appendChild(pre);
 }
 
 function logNow() {
@@ -499,19 +630,19 @@ function calculatePlan() {
   prevTick.setMinutes(Math.floor(targetDate.getMinutes() / 15) * 15, 0, 0);
   const nextTick = new Date(prevTick.getTime() + 15 * 60000);
 
-  const obs = state.observations.filter(o => o.dest === dest).sort((a,b) => new Date(b.time) - new Date(a.time));
   const prediction = predictNextRestock(dest);
 
   let liveInfo = '';
-  if (state.liveStock) {
-    const countryData = Object.values(state.liveStock.stocks).find(c => (c.country || '').toLowerCase() === dest.toLowerCase());
-    if (countryData && countryData.stocks) {
-      const items = state.liveStock.items;
-      const stockList = countryData.stocks.map(s => {
-        const name = (items[s.id] || {}).name || `#${s.id}`;
-        return `${name}: ${s.quantity}`;
-      }).join(' · ');
-      liveInfo = `<div class="prediction-card confident"><strong>Live stock (as of last refresh):</strong><div style="font-size:13px;margin-top:4px">${stockList}</div></div>`;
+  if (state.yataData) {
+    const rows = extractStockRows().filter(r => r.country === dest);
+    if (rows.length > 0) {
+      const ageMin = Math.round((Date.now() - new Date(state.yataFetchedAt))/60000);
+      liveInfo = `<div class="prediction-card confident"><strong>Live stock (YATA, ${ageMin}m old):</strong>
+        <table style="margin-top:8px;font-size:12px">
+          <thead><tr><th>Item</th><th>Stock</th><th>Buy</th></tr></thead>
+          <tbody>${rows.map(r => `<tr><td>${r.itemName}</td><td class="num">${fmt(r.stock)}</td><td class="num">$${fmt(r.cost)}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>`;
     }
   }
 
@@ -683,16 +814,18 @@ function handleImport(event) {
 }
 
 function clearAllData() {
-  if (confirm('Delete ALL data?')) {
+  if (confirm('Delete ALL data (keeps API key and settings)?')) {
     if (confirm('Really?')) {
       state.observations = [];
       state.flights = [];
-      state.liveStock = null;
+      state.yataData = null;
+      state.yataFetchedAt = null;
       save();
       renderDashboard();
       renderObservations();
       renderFlights();
       renderLiveStock();
+      updateYataStatus();
     }
   }
 }
@@ -713,7 +846,10 @@ logNow();
 document.getElementById('flight-date').value = new Date().toISOString().slice(0,10);
 document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
 renderLiveStock();
-if (state.liveStockTime) {
-  document.getElementById('last-refresh').textContent = `Last refreshed: ${new Date(state.liveStockTime).toLocaleString()}`;
+updateYataStatus();
+if (state.yataFetchedAt) {
+  document.getElementById('last-refresh').textContent = `YATA data fetched: ${new Date(state.yataFetchedAt).toLocaleString()}`;
 }
+setInterval(updateYataStatus, 30000);
 </script>
+
