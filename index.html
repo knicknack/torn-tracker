@@ -10,9 +10,9 @@
   .status-chip.warn { background: #FAEEDA; color: #633806; }
   .status-chip.bad { background: #FCEBEB; color: #791F1F; }
   .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #d3d1c7; flex-wrap: wrap; }
-  .tab { padding: 10px 16px; cursor: pointer; border: none; background: transparent; font-size: 14px; font-family: inherit; color: #5f5e5a; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab { padding: 10px 16px; cursor: pointer; border: none; background: transparent; font-size: 14px; font-family: inherit; color: #5f5e5a; border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: 4px 4px 0 0; }
   .tab.active { color: #2a2a28; border-bottom-color: #534AB7; font-weight: 500; }
-  .tab:hover:not(.active) { color: #2a2a28; }
+  .tab:hover:not(.active) { color: #2a2a28; background: #faf9f5; }
   .panel { display: none; background: white; padding: 20px; border-radius: 8px; border: 1px solid #d3d1c7; }
   .panel.active { display: block; }
   label { display: block; font-size: 13px; color: #5f5e5a; margin-bottom: 4px; }
@@ -423,11 +423,6 @@ function findDestination(key) {
 function extractStockRows() {
   const rows = [];
   if (!state.yataData) return rows;
-
-  // YATA has had several response shapes over time. Try to handle whatever we get.
-  // Shape 1: { stocks: { <country>: { update, stocks: { <item_id>: {...} } } } }
-  // Shape 2: { <country>: { items: [...] } }
-  // Shape 3: { <country>: { stocks: {...} } }
   let stocksRoot = state.yataData.stocks || state.yataData;
 
   for (const countryKey in stocksRoot) {
@@ -437,17 +432,14 @@ function extractStockRows() {
     if (!dest) continue;
     const countryName = dest.name;
 
-    // Find the item list: could be entry.stocks (object), entry.items (array), or entry itself
     let itemSource = entry.stocks || entry.items || entry;
     if (!itemSource || typeof itemSource !== 'object') continue;
 
-    // Handle array form (items array)
     if (Array.isArray(itemSource)) {
       for (const item of itemSource) {
         addRow(rows, countryName, item.id, item, entry);
       }
     } else {
-      // Object form (keyed by item id)
       for (const itemId in itemSource) {
         const item = itemSource[itemId];
         if (!item || typeof item !== 'object') continue;
@@ -852,4 +844,3 @@ if (state.yataFetchedAt) {
 }
 setInterval(updateYataStatus, 30000);
 </script>
-
