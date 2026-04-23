@@ -1,7 +1,6 @@
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f5f0; color: #2a2a28; line-height: 1.5; }
   h1 { font-size: 22px; font-weight: 500; margin: 0 0 4px; }
-  h2 { font-size: 18px; font-weight: 500; margin: 24px 0 12px; border-bottom: 1px solid #d3d1c7; padding-bottom: 6px; }
   h3 { font-size: 15px; font-weight: 500; margin: 16px 0 8px; }
   .subtitle { color: #5f5e5a; font-size: 14px; margin-bottom: 12px; }
   .status-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -11,42 +10,28 @@
   .status-chip.bad { background: #FCEBEB; color: #791F1F; }
   .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #d3d1c7; flex-wrap: wrap; }
   .tab { padding: 10px 16px; cursor: pointer; border: none; background: transparent; font-size: 14px; font-family: inherit; color: #5f5e5a; border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: 4px 4px 0 0; }
-  .tab.active { color: #2a2a28; border-bottom-color: #534AB7; font-weight: 500; }
+  .tab.active { color: #2a2a28; background: transparent; border-bottom-color: #534AB7; font-weight: 500; }
+  .tab.active:hover { color: #2a2a28; background: #faf9f5; }
   .tab:hover:not(.active) { color: #2a2a28; background: #faf9f5; }
+  .tab:focus { outline: none; }
+  .tab:focus-visible { outline: 2px solid #534AB7; outline-offset: -2px; }
   .panel { display: none; background: white; padding: 20px; border-radius: 8px; border: 1px solid #d3d1c7; }
   .panel.active { display: block; }
+  .panel.no-padding { padding: 0; overflow: hidden; }
   label { display: block; font-size: 13px; color: #5f5e5a; margin-bottom: 4px; }
-  input, select, textarea { font-family: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid #d3d1c7; border-radius: 6px; background: white; color: #2a2a28; box-sizing: border-box; width: 100%; }
-  input:focus, select:focus, textarea:focus { outline: none; border-color: #534AB7; }
+  input, select { font-family: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid #d3d1c7; border-radius: 6px; background: white; color: #2a2a28; box-sizing: border-box; width: 100%; }
+  input:focus, select:focus { outline: none; border-color: #534AB7; }
   button { background: #534AB7; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 14px; }
   button:hover { background: #3C3489; }
   button:disabled { background: #B4B2A9; cursor: not-allowed; }
   button.secondary { background: #e8e7e0; color: #2a2a28; }
   button.secondary:hover { background: #d3d1c7; }
-  button.danger { background: transparent; color: #A32D2D; padding: 4px 8px; font-size: 12px; }
-  button.danger:hover { background: #FCEBEB; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; padding: 8px; background: #f5f5f0; border-bottom: 1px solid #d3d1c7; font-weight: 500; color: #5f5e5a; cursor: pointer; user-select: none; white-space: nowrap; }
-  th:hover { background: #eeece5; }
+  th { text-align: left; padding: 8px; background: #f5f5f0; border-bottom: 1px solid #d3d1c7; font-weight: 500; color: #5f5e5a; white-space: nowrap; }
   td { padding: 8px; border-bottom: 1px solid #e8e7e0; }
   tr:hover td { background: #faf9f5; }
   .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 12px; }
   .hint { font-size: 12px; color: #888780; margin-top: 2px; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
-  .badge-green { background: #EAF3DE; color: #27500A; }
-  .badge-amber { background: #FAEEDA; color: #633806; }
-  .badge-red { background: #FCEBEB; color: #791F1F; }
-  .badge-gray { background: #F1EFE8; color: #5F5E5A; }
-  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
-  .stat-card { background: #faf9f5; padding: 12px; border-radius: 6px; border: 1px solid #e8e7e0; }
-  .stat-label { font-size: 12px; color: #5f5e5a; }
-  .stat-value { font-size: 20px; font-weight: 500; margin-top: 2px; }
-  .stat-sub { font-size: 11px; color: #888780; margin-top: 2px; }
-  .timeline { font-family: 'SF Mono', Monaco, monospace; font-size: 13px; background: #faf9f5; padding: 12px; border-radius: 6px; white-space: pre-line; line-height: 1.8; }
-  .prediction-card { background: #faf9f5; padding: 12px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #534AB7; }
-  .prediction-card.confident { border-left-color: #639922; }
-  .prediction-card.uncertain { border-left-color: #EF9F27; }
-  .prediction-card.unknown { border-left-color: #B4B2A9; }
   .section-desc { font-size: 13px; color: #5f5e5a; margin-bottom: 12px; }
   .empty-state { text-align: center; padding: 40px 20px; color: #888780; font-size: 14px; }
   .num { font-variant-numeric: tabular-nums; }
@@ -62,10 +47,24 @@
   .toast.show { opacity: 1; }
   code { background: #F1EFE8; padding: 1px 4px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; }
   .data-source-note { font-size: 12px; color: #888780; padding: 8px 12px; background: #faf9f5; border-radius: 6px; margin-bottom: 12px; }
+  .te-controls { padding: 20px; background: #faf9f5; border-bottom: 1px solid #d3d1c7; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .te-controls a { display: inline-block; background: #534AB7; color: white; padding: 8px 14px; border-radius: 6px; text-decoration: none; font-size: 14px; }
+  .te-controls a:hover { background: #3C3489; }
+  .te-controls a.secondary { background: #e8e7e0; color: #2a2a28; }
+  .te-controls a.secondary:hover { background: #d3d1c7; }
+  .te-frame { width: 100%; height: 1200px; border: none; display: block; background: white; }
+  .te-fallback { padding: 40px 20px; text-align: center; display: none; }
+  .te-fallback h3 { margin-top: 0; }
+  .te-fallback ul { text-align: left; max-width: 600px; margin: 20px auto; line-height: 1.8; }
+  .quick-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin: 16px 0; }
+  .quick-link { display: block; padding: 10px 14px; background: white; border: 1px solid #d3d1c7; border-radius: 6px; text-decoration: none; color: #2a2a28; font-size: 13px; text-align: left; }
+  .quick-link:hover { background: #faf9f5; border-color: #534AB7; }
+  .quick-link strong { display: block; font-weight: 500; }
+  .quick-link span { font-size: 11px; color: #888780; }
 </style>
 
 <h1>Torn Travel Tracker</h1>
-<p class="subtitle">Live stock · restock predictions · flight planner · profit history</p>
+<p class="subtitle">Live stock · trader directory · settings</p>
 <div class="status-bar">
   <span id="yata-status" class="status-chip warn">YATA: not loaded</span>
   <span id="torn-status" class="status-chip warn">Torn API: no key</span>
@@ -73,16 +72,13 @@
 
 <div class="tabs">
   <button class="tab active" data-tab="live">Live stock</button>
-  <button class="tab" data-tab="dashboard">Dashboard</button>
-  <button class="tab" data-tab="log">Log observation</button>
-  <button class="tab" data-tab="planner">Flight planner</button>
-  <button class="tab" data-tab="history">Flight history</button>
+  <button class="tab" data-tab="traders">Traders</button>
   <button class="tab" data-tab="settings">Settings</button>
 </div>
 
 <div id="live" class="panel active">
   <div class="data-source-note">
-    Stock data from <strong>YATA</strong> (community-maintained, updated when players land abroad). Market prices from <strong>Torn's API</strong>. YATA caches for 5 minutes to respect their 10-call/hour rate limit.
+    Stock data from <strong>YATA</strong> (community-maintained). Market prices from <strong>Torn API</strong>. Cached 5 min to respect YATA's rate limit.
   </div>
   <div class="filter-bar">
     <button onclick="refreshAll()" id="refresh-btn">Refresh data</button>
@@ -114,78 +110,20 @@
   <div id="live-table-container"></div>
 </div>
 
-<div id="dashboard" class="panel">
-  <div class="stats-grid" id="stats-grid"></div>
-  <h3>Restock predictions by destination</h3>
-  <p class="section-desc">Combines your observations with live stock readings.</p>
-  <div id="predictions-list"></div>
-</div>
-
-<div id="log" class="panel">
-  <h3>Log an observation</h3>
-  <p class="section-desc">Your observations feed the prediction engine. Log full restocks and sold-out events especially.</p>
-  <div class="form-row">
-    <div><label>Destination</label><select id="log-dest"></select></div>
-    <div><label>Item</label><input type="text" id="log-item" placeholder="e.g. Camel Plushie" /></div>
-    <div><label>Stock seen</label><input type="number" id="log-stock" placeholder="e.g. 1800" /></div>
-    <div><label>Observed at</label><input type="datetime-local" id="log-time" /></div>
+<div id="traders" class="panel no-padding">
+  <div class="te-controls">
+    <a href="https://www.tornexchange.com/listings" target="_blank" rel="noopener">Open TornExchange (listings) ↗</a>
+    <a href="https://www.tornexchange.com/" target="_blank" rel="noopener" class="secondary">Top traders ↗</a>
+    <div style="flex:1"></div>
+    <span class="hint">Embed below may or may not load — if not, use the buttons above</span>
   </div>
-  <div class="form-row">
-    <div>
-      <label>Status</label>
-      <select id="log-status">
-        <option value="partial">Partial (some stock)</option>
-        <option value="full">Full restock (just refilled)</option>
-        <option value="soldout">Sold out (empty)</option>
-      </select>
-    </div>
-    <div><label>Notes (optional)</label><input type="text" id="log-notes" placeholder="e.g. PlyBur says it hit at 2:15" /></div>
+  <iframe id="te-frame" class="te-frame" src="https://www.tornexchange.com/listings"></iframe>
+  <div id="te-fallback" class="te-fallback">
+    <h3>TornExchange can't be embedded here</h3>
+    <p class="section-desc">The site blocks being loaded inside other pages (a standard security measure). Use the buttons above to open it in a new tab — or use these quick links to the top 30 traders from the last 30 days:</p>
+    <div class="quick-links" id="top-traders-links"></div>
+    <p class="hint">Tip: Right-click any link and open in a new tab to compare prices across multiple traders.</p>
   </div>
-  <button onclick="logObservation()">Save observation</button>
-  <button class="secondary" onclick="logNow()">Set time to now</button>
-  <h3 style="margin-top:28px">Recent observations</h3>
-  <div id="obs-list"></div>
-</div>
-
-<div id="planner" class="panel">
-  <h3>Plan a flight</h3>
-  <p class="section-desc">Work backwards from a target arrival time.</p>
-  <div class="form-row">
-    <div><label>Destination</label><select id="plan-dest"></select></div>
-    <div><label>Target arrival</label><input type="datetime-local" id="plan-target" /></div>
-    <div><label>Capacity</label><input type="number" id="plan-capacity" value="19" /></div>
-    <div><label>Bonus slots</label><input type="number" id="plan-bonus" value="5" /></div>
-  </div>
-  <button onclick="calculatePlan()">Calculate plan</button>
-  <div id="plan-output" style="margin-top:20px"></div>
-  <h3 style="margin-top:28px">Daily schedule template</h3>
-  <div class="timeline">~07:30  Sell overnight haul, launch medium-haul
-~11:30  Land, relist, launch second medium
-~16:00  Land, launch Hawaii or another medium
-~20:00  Land, launch overnight long-haul (UAE / China / SA)
-~23:00  Sell through, sign off
-
-PlyBur's window (~06:00–13:00 PDT = his 15:00–22:00 SAST)
-— Overlap chat window, short-flight coordination
-— He handles long-hauls during your sleep</div>
-</div>
-
-<div id="history" class="panel">
-  <h3>Log a completed flight</h3>
-  <div class="form-row">
-    <div><label>Date</label><input type="date" id="flight-date" /></div>
-    <div><label>Destination</label><select id="flight-dest"></select></div>
-    <div><label>Item</label><input type="text" id="flight-item" /></div>
-    <div><label>Quantity</label><input type="number" id="flight-qty" /></div>
-  </div>
-  <div class="form-row">
-    <div><label>Total buy price</label><input type="number" id="flight-buy" /></div>
-    <div><label>Total sell price</label><input type="number" id="flight-sell" /></div>
-    <div><label>Notes</label><input type="text" id="flight-notes" /></div>
-  </div>
-  <button onclick="logFlight()">Save flight</button>
-  <h3 style="margin-top:28px">Flight history</h3>
-  <div id="flight-list"></div>
 </div>
 
 <div id="settings" class="panel">
@@ -224,15 +162,9 @@ PlyBur's window (~06:00–13:00 PDT = his 15:00–22:00 SAST)
   </div>
   <button onclick="saveSettings()">Save settings</button>
 
-  <h3 style="margin-top:28px">Data management</h3>
-  <button class="secondary" onclick="exportData()">Export all data</button>
-  <button class="secondary" onclick="importData()">Import data</button>
-  <button class="secondary" onclick="clearAllData()" style="color:#A32D2D">Clear all data</button>
-  <input type="file" id="import-file" style="display:none" onchange="handleImport(event)" accept=".json" />
-
   <h3 style="margin-top:28px">About</h3>
   <p class="section-desc">
-    Foreign stock data is crowd-sourced from YATA (the same source TornPDA, TornTools, and torntravel use). YATA's rate limit is 10 calls per hour per IP — this tool caches data for 5 minutes. Restock predictions use the community heuristic (sell-out ÷ 2, rounded to 15-min tick). All your personal data stays in this browser.
+    Foreign stock data crowd-sourced from YATA (the source used by TornPDA, TornTools, and torntravel). Trader directory links to TornExchange. Nothing is logged or stored on any server — all your data stays in this browser.
   </p>
 </div>
 
@@ -253,11 +185,42 @@ const DESTINATIONS = [
   { name: 'South Africa', standardMin: 297, yataCodes: ['sou', 'south africa'] }
 ];
 
+const TOP_TRADERS = [
+  { name: 'Muckamuck', trades: 5333 },
+  { name: 'begaydocrimes', trades: 2161 },
+  { name: 'FrostyTheXanMan', trades: 2133 },
+  { name: 'LMN_OP', trades: 2079 },
+  { name: 'M4rshmall0w', trades: 1774 },
+  { name: 'Dracula', trades: 1628 },
+  { name: 'Friends', trades: 1610 },
+  { name: 'xeven', trades: 1380 },
+  { name: 'SavageGrace', trades: 1159 },
+  { name: 'VexRemington', trades: 1089 },
+  { name: 'iSonicV', trades: 951 },
+  { name: 'Turkeybop6141', trades: 946 },
+  { name: 'MKBBGL', trades: 893 },
+  { name: 'Smez', trades: 872 },
+  { name: 'badfriend', trades: 742 },
+  { name: '-Josh-', trades: 728 },
+  { name: 'Emsilo', trades: 715 },
+  { name: 'AltairYanyan', trades: 691 },
+  { name: 'ankitjainaj', trades: 662 },
+  { name: 'the_khush', trades: 603 },
+  { name: 'Minitamark', trades: 566 },
+  { name: 'WhackedMaki', trades: 555 },
+  { name: 'joshieb', trades: 543 },
+  { name: 'Drunkinahole', trades: 527 },
+  { name: 'OldGoat', trades: 526 },
+  { name: 'Trivia-', trades: 509 },
+  { name: 'Prophecy', trades: 504 },
+  { name: '04doolant', trades: 504 },
+  { name: 'BlueChedow', trades: 492 },
+  { name: 'Heartflower', trades: 486 }
+];
+
 const YATA_CACHE_MINUTES = 5;
 
 let state = {
-  observations: [],
-  flights: [],
   settings: { tzOffset: -7, travelMethod: 0.7, apiKey: '' },
   yataData: null,
   yataFetchedAt: null,
@@ -282,13 +245,19 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-function populateDestDropdowns() {
-  ['log-dest', 'plan-dest', 'flight-dest'].forEach(id => {
-    const sel = document.getElementById(id);
-    sel.innerHTML = DESTINATIONS.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
-  });
+function populateDestDropdown() {
   const countrySel = document.getElementById('live-country');
   countrySel.innerHTML = '<option value="all">All countries</option>' + DESTINATIONS.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
+}
+
+function renderTopTraders() {
+  const container = document.getElementById('top-traders-links');
+  container.innerHTML = TOP_TRADERS.map(t =>
+    `<a href="https://www.tornexchange.com/prices/${encodeURIComponent(t.name)}/" target="_blank" rel="noopener" class="quick-link">
+      <strong>${t.name}</strong>
+      <span>${t.trades.toLocaleString()} trades / 30 days</span>
+    </a>`
+  ).join('');
 }
 
 function initSettings() {
@@ -424,17 +393,14 @@ function extractStockRows() {
   const rows = [];
   if (!state.yataData) return rows;
   let stocksRoot = state.yataData.stocks || state.yataData;
-
   for (const countryKey in stocksRoot) {
     const entry = stocksRoot[countryKey];
     if (!entry || typeof entry !== 'object') continue;
     const dest = findDestination(countryKey);
     if (!dest) continue;
     const countryName = dest.name;
-
     let itemSource = entry.stocks || entry.items || entry;
     if (!itemSource || typeof itemSource !== 'object') continue;
-
     if (Array.isArray(itemSource)) {
       for (const item of itemSource) {
         addRow(rows, countryName, item.id, item, entry);
@@ -460,12 +426,10 @@ function addRow(rows, countryName, itemId, item, countryEntry) {
   rows.push({
     country: countryName,
     itemId: String(itemId),
-    itemName,
-    itemType,
+    itemName, itemType,
     stock: Number(quantity) || 0,
     cost: Number(cost) || 0,
-    marketValue: Number(marketValue) || 0,
-    updatedAt: countryEntry.update || countryEntry.timestamp || null
+    marketValue: Number(marketValue) || 0
   });
 }
 
@@ -477,14 +441,9 @@ function renderLiveStock() {
   }
   const rows = extractStockRows();
   if (rows.length === 0) {
-    container.innerHTML = `<div class="empty-state">
-      YATA returned data but no stock rows were parseable. The response shape may have changed.
-      <br><br>
-      <button class="secondary" onclick="showRawYata()">Show raw YATA response (for debugging)</button>
-    </div>`;
+    container.innerHTML = '<div class="empty-state">YATA returned data but no stock rows were parseable.</div>';
     return;
   }
-
   const sortBy = document.getElementById('live-sort').value;
   const minStock = parseInt(document.getElementById('live-min-stock').value) || 0;
   const capacity = parseInt(document.getElementById('live-capacity').value) || 19;
@@ -508,10 +467,9 @@ function renderLiveStock() {
   });
 
   if (enriched.length === 0) {
-    container.innerHTML = '<div class="empty-state">No items match your filters. Try lowering min stock or changing country.</div>';
+    container.innerHTML = '<div class="empty-state">No items match your filters.</div>';
     return;
   }
-
   const hasMarketData = state.itemsData !== null;
 
   container.innerHTML = `<table>
@@ -527,8 +485,7 @@ function renderLiveStock() {
         ? `<td class="num">$${fmt(r.marketValue)}</td><td class="num">$${fmt(r.profitPerItem)}</td><td class="num">$${fmt(r.totalProfit)}</td><td class="num">$${fmt(r.profitPerHour)}</td>`
         : '<td colspan="4" style="color:#888780">—</td>';
       return `<tr>
-        <td>${r.country}</td>
-        <td>${r.itemName}</td>
+        <td>${r.country}</td><td>${r.itemName}</td>
         <td class="num ${stockCls}">${fmt(r.stock)}</td>
         <td class="num">$${fmt(r.cost)}</td>
         ${profitCell}
@@ -537,233 +494,7 @@ function renderLiveStock() {
   </table>`;
 }
 
-function showRawYata() {
-  const pre = document.createElement('pre');
-  pre.style.cssText = 'background:#2a2a28;color:#fff;padding:12px;border-radius:6px;overflow:auto;max-height:400px;font-size:11px';
-  pre.textContent = JSON.stringify(state.yataData, null, 2).slice(0, 5000) + '\n\n... (truncated)';
-  document.getElementById('live-table-container').appendChild(pre);
-}
-
-function logNow() {
-  const now = new Date();
-  now.setSeconds(0, 0);
-  const offset = now.getTimezoneOffset() * 60000;
-  document.getElementById('log-time').value = new Date(now - offset).toISOString().slice(0,16);
-}
-
-function logObservation() {
-  const dest = document.getElementById('log-dest').value;
-  const item = document.getElementById('log-item').value.trim();
-  const stock = parseInt(document.getElementById('log-stock').value);
-  const time = document.getElementById('log-time').value;
-  const status = document.getElementById('log-status').value;
-  const notes = document.getElementById('log-notes').value.trim();
-  if (!item || isNaN(stock) || !time) { toast('Fill in item, stock, time'); return; }
-  state.observations.push({ id: Date.now(), dest, item, stock, time, status, notes, logged: new Date().toISOString() });
-  save();
-  ['log-item','log-stock','log-notes'].forEach(id => document.getElementById(id).value = '');
-  renderObservations();
-  toast('Observation saved');
-}
-
-function deleteObservation(id) {
-  state.observations = state.observations.filter(o => o.id !== id);
-  save();
-  renderObservations();
-}
-
-function renderObservations() {
-  const list = document.getElementById('obs-list');
-  const recent = [...state.observations].sort((a,b) => new Date(b.time) - new Date(a.time)).slice(0, 20);
-  if (recent.length === 0) { list.innerHTML = '<div class="empty-state">No observations yet.</div>'; return; }
-  list.innerHTML = `<table><thead><tr><th>When</th><th>Destination</th><th>Item</th><th>Stock</th><th>Status</th><th>Notes</th><th></th></tr></thead>
-    <tbody>${recent.map(o => `<tr>
-      <td>${formatDateTime(o.time)}</td><td>${o.dest}</td><td>${o.item}</td>
-      <td class="num">${o.stock}</td><td>${statusBadge(o.status)}</td><td>${o.notes || ''}</td>
-      <td><button class="danger" onclick="deleteObservation(${o.id})">Delete</button></td>
-    </tr>`).join('')}</tbody></table>`;
-}
-
-function statusBadge(s) {
-  if (s === 'full') return '<span class="badge badge-green">Full</span>';
-  if (s === 'partial') return '<span class="badge badge-amber">Partial</span>';
-  if (s === 'soldout') return '<span class="badge badge-red">Sold out</span>';
-  return '<span class="badge badge-gray">?</span>';
-}
-
-function formatDateTime(s) {
-  try { return new Date(s).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
-  catch(e) { return s; }
-}
-
-function getTravelTime(dest) {
-  const d = DESTINATIONS.find(x => x.name === dest);
-  return Math.round(d.standardMin * state.settings.travelMethod);
-}
-
-function roundToNext15(date) {
-  const d = new Date(date);
-  d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
-  return d;
-}
-
-function calculatePlan() {
-  const dest = document.getElementById('plan-dest').value;
-  const target = document.getElementById('plan-target').value;
-  const capacity = parseInt(document.getElementById('plan-capacity').value) || 19;
-  const bonus = parseInt(document.getElementById('plan-bonus').value) || 0;
-  if (!target) { toast('Set a target arrival time'); return; }
-
-  const travelMin = getTravelTime(dest);
-  const targetDate = new Date(target);
-  const departDate = new Date(targetDate.getTime() - travelMin * 60000);
-  const returnDate = new Date(targetDate.getTime() + travelMin * 60000);
-  const prevTick = new Date(targetDate);
-  prevTick.setMinutes(Math.floor(targetDate.getMinutes() / 15) * 15, 0, 0);
-  const nextTick = new Date(prevTick.getTime() + 15 * 60000);
-
-  const prediction = predictNextRestock(dest);
-
-  let liveInfo = '';
-  if (state.yataData) {
-    const rows = extractStockRows().filter(r => r.country === dest);
-    if (rows.length > 0) {
-      const ageMin = Math.round((Date.now() - new Date(state.yataFetchedAt))/60000);
-      liveInfo = `<div class="prediction-card confident"><strong>Live stock (YATA, ${ageMin}m old):</strong>
-        <table style="margin-top:8px;font-size:12px">
-          <thead><tr><th>Item</th><th>Stock</th><th>Buy</th></tr></thead>
-          <tbody>${rows.map(r => `<tr><td>${r.itemName}</td><td class="num">${fmt(r.stock)}</td><td class="num">$${fmt(r.cost)}</td></tr>`).join('')}</tbody>
-        </table>
-      </div>`;
-    }
-  }
-
-  document.getElementById('plan-output').innerHTML = `
-    <div class="prediction-card confident">
-      <h3 style="margin:0 0 8px">Flight plan: ${dest}</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
-        <div><strong>Depart:</strong> ${formatDateTime(departDate)}</div>
-        <div><strong>Arrive:</strong> ${formatDateTime(targetDate)}</div>
-        <div><strong>Return:</strong> ${formatDateTime(returnDate)}</div>
-        <div><strong>Flight time:</strong> ${travelMin} min each way</div>
-        <div><strong>Capacity:</strong> ${capacity} + ${bonus} = ${capacity + bonus} items</div>
-        <div><strong>Nearest ticks:</strong> ${prevTick.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} / ${nextTick.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-      </div>
-    </div>
-    ${liveInfo}
-    ${prediction ? `<div class="prediction-card ${prediction.confidence}"><strong>Restock prediction:</strong> ${prediction.text}</div>` : ''}
-    <div class="prediction-card">
-      <strong>Pre-flight checks:</strong>
-      <ul style="margin:6px 0 0 20px;padding:0;font-size:13px">
-        <li>Refresh live stock before launching</li>
-        <li>Minimum 2K stock on long-hauls, 1K on mediums</li>
-        <li>Confirm cash on hand covers full-load buy</li>
-        <li>If OC active, verify planning timer has room for round trip</li>
-        <li>Drop country in chat with PlyBur to avoid overlap</li>
-      </ul>
-    </div>
-  `;
-}
-
-function predictNextRestock(dest) {
-  const obs = state.observations.filter(o => o.dest === dest && (o.status === 'full' || o.status === 'soldout')).sort((a,b) => new Date(a.time) - new Date(b.time));
-  if (obs.length < 2) return null;
-  const cycles = [];
-  let lastFull = null;
-  for (const o of obs) {
-    if (o.status === 'full') lastFull = o;
-    else if (o.status === 'soldout' && lastFull) {
-      const duration = (new Date(o.time) - new Date(lastFull.time)) / 60000;
-      if (duration > 0 && duration < 10080) cycles.push({ sellOutMin: duration, soldOutAt: o.time });
-      lastFull = null;
-    }
-  }
-  if (cycles.length === 0) {
-    const lastObs = obs[obs.length - 1];
-    return { confidence: 'uncertain', text: `Not enough cycle data yet. Last: ${statusBadge(lastObs.status)} at ${formatDateTime(lastObs.time)}.` };
-  }
-  const avgSellOut = cycles.reduce((s,c) => s + c.sellOutMin, 0) / cycles.length;
-  const restockDelay = avgSellOut / 2;
-  const lastCycle = cycles[cycles.length - 1];
-  const predictedRestock = new Date(new Date(lastCycle.soldOutAt).getTime() + restockDelay * 60000);
-  const roundedRestock = roundToNext15(predictedRestock);
-  const confidence = cycles.length >= 3 ? 'confident' : 'uncertain';
-  return { confidence, text: `Based on ${cycles.length} cycle(s), avg sell-out ${Math.round(avgSellOut)} min. Estimated next restock: ~${formatDateTime(roundedRestock)}.` };
-}
-
-function logFlight() {
-  const date = document.getElementById('flight-date').value;
-  const dest = document.getElementById('flight-dest').value;
-  const item = document.getElementById('flight-item').value.trim();
-  const qty = parseInt(document.getElementById('flight-qty').value);
-  const buy = parseInt(document.getElementById('flight-buy').value);
-  const sell = parseInt(document.getElementById('flight-sell').value);
-  const notes = document.getElementById('flight-notes').value.trim();
-  if (!date || !item || isNaN(qty) || isNaN(buy) || isNaN(sell)) { toast('Fill in all required fields'); return; }
-  state.flights.push({ id: Date.now(), date, dest, item, qty, buy, sell, notes, profit: sell - buy, logged: new Date().toISOString() });
-  save();
-  ['flight-item','flight-qty','flight-buy','flight-sell','flight-notes'].forEach(id => document.getElementById(id).value = '');
-  renderFlights();
-  toast('Flight saved');
-}
-
-function deleteFlight(id) {
-  state.flights = state.flights.filter(f => f.id !== id);
-  save();
-  renderFlights();
-}
-
-function renderFlights() {
-  const list = document.getElementById('flight-list');
-  const recent = [...state.flights].sort((a,b) => b.date.localeCompare(a.date));
-  if (recent.length === 0) { list.innerHTML = '<div class="empty-state">No flights logged yet.</div>'; return; }
-  const totalProfit = recent.reduce((s,f) => s + f.profit, 0);
-  const avgProfit = Math.round(totalProfit / recent.length);
-  list.innerHTML = `
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-label">Total flights</div><div class="stat-value num">${recent.length}</div></div>
-      <div class="stat-card"><div class="stat-label">Total profit</div><div class="stat-value num">$${fmt(totalProfit)}</div></div>
-      <div class="stat-card"><div class="stat-label">Avg per flight</div><div class="stat-value num">$${fmt(avgProfit)}</div></div>
-    </div>
-    <table><thead><tr><th>Date</th><th>Destination</th><th>Item</th><th>Qty</th><th>Buy</th><th>Sell</th><th>Profit</th><th>Notes</th><th></th></tr></thead>
-      <tbody>${recent.map(f => `<tr>
-        <td>${f.date}</td><td>${f.dest}</td><td>${f.item}</td><td class="num">${f.qty}</td>
-        <td class="num">$${fmt(f.buy)}</td><td class="num">$${fmt(f.sell)}</td>
-        <td class="num" style="color:${f.profit > 0 ? '#27500A' : '#791F1F'}">$${fmt(f.profit)}</td>
-        <td>${f.notes || ''}</td>
-        <td><button class="danger" onclick="deleteFlight(${f.id})">Delete</button></td>
-      </tr>`).join('')}</tbody></table>`;
-}
-
 function fmt(n) { return new Intl.NumberFormat().format(n); }
-
-function renderDashboard() {
-  const recent30 = state.flights.filter(f => (Date.now() - new Date(f.date)) < 30 * 86400000);
-  const totalProfit30 = recent30.reduce((s,f) => s + f.profit, 0);
-  const avgProfit = recent30.length > 0 ? Math.round(totalProfit30 / recent30.length) : 0;
-  const totalObs = state.observations.length;
-  const destCovered = new Set(state.observations.map(o => o.dest)).size;
-  document.getElementById('stats-grid').innerHTML = `
-    <div class="stat-card"><div class="stat-label">Flights (30d)</div><div class="stat-value num">${recent30.length}</div></div>
-    <div class="stat-card"><div class="stat-label">Profit (30d)</div><div class="stat-value num">$${fmt(totalProfit30)}</div></div>
-    <div class="stat-card"><div class="stat-label">Avg per flight</div><div class="stat-value num">$${fmt(avgProfit)}</div></div>
-    <div class="stat-card"><div class="stat-label">Observations</div><div class="stat-value num">${totalObs}</div><div class="stat-sub">${destCovered}/11 destinations</div></div>
-  `;
-  const predList = document.getElementById('predictions-list');
-  predList.innerHTML = DESTINATIONS.map(d => {
-    const p = predictNextRestock(d.name);
-    const obs = state.observations.filter(o => o.dest === d.name);
-    const travelMin = getTravelTime(d.name);
-    const cls = p ? p.confidence : 'unknown';
-    return `<div class="prediction-card ${cls}">
-      <div style="display:flex;justify-content:space-between;align-items:baseline">
-        <strong>${d.name}</strong>
-        <span class="hint">${travelMin} min one way · ${obs.length} obs</span>
-      </div>
-      <div style="font-size:13px;margin-top:4px">${p ? p.text : 'No data yet. Log observations to build predictions.'}</div>
-    </div>`;
-  }).join('');
-}
 
 function saveSettings() {
   state.settings.tzOffset = parseFloat(document.getElementById('tz-offset').value) || -7;
@@ -772,70 +503,39 @@ function saveSettings() {
   toast('Settings saved');
 }
 
-function exportData() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `torn-tracker-${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function importData() { document.getElementById('import-file').click(); }
-
-function handleImport(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
+setTimeout(() => {
+  const frame = document.getElementById('te-frame');
+  if (frame) {
     try {
-      const data = JSON.parse(e.target.result);
-      if (confirm('Replace all current data?')) {
-        state = { ...state, ...data };
-        save();
-        renderDashboard();
-        renderObservations();
-        renderFlights();
-        renderLiveStock();
-        toast('Data imported');
+      if (!frame.contentWindow || frame.contentWindow.location.href === 'about:blank') {
+        showTeFallback();
       }
-    } catch(err) { toast('Invalid file'); }
-  };
-  reader.readAsText(file);
-}
-
-function clearAllData() {
-  if (confirm('Delete ALL data (keeps API key and settings)?')) {
-    if (confirm('Really?')) {
-      state.observations = [];
-      state.flights = [];
-      state.yataData = null;
-      state.yataFetchedAt = null;
-      save();
-      renderDashboard();
-      renderObservations();
-      renderFlights();
-      renderLiveStock();
-      updateYataStatus();
+    } catch(e) {
+      showTeFallback();
     }
   }
+}, 4000);
+
+function showTeFallback() {
+  const frame = document.getElementById('te-frame');
+  const fallback = document.getElementById('te-fallback');
+  if (frame) frame.style.display = 'none';
+  if (fallback) fallback.style.display = 'block';
 }
 
 function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === tab);
+    t.blur();
+  });
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === tab));
-  if (tab === 'dashboard') renderDashboard();
-  if (tab === 'log') renderObservations();
-  if (tab === 'history') renderFlights();
   if (tab === 'live') renderLiveStock();
 }
 
 load();
-populateDestDropdowns();
+populateDestDropdown();
+renderTopTraders();
 initSettings();
-logNow();
-document.getElementById('flight-date').value = new Date().toISOString().slice(0,10);
 document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
 renderLiveStock();
 updateYataStatus();
