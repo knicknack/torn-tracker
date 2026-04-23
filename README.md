@@ -1,2 +1,3 @@
-coming soon...
-we are going to rule this place.
+Created for PlyBur and Hunka
+Compete notes coming soon.
+We will rule!
