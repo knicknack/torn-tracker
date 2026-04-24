@@ -196,16 +196,9 @@
     <button class="secondary" onclick="clearApiKey()">Remove key</button>
   </div>
 
-  <h3>Shared lists with PlyBur (JSONBin)</h3>
+  <h3>Shared lists (JSONBin)</h3>
   <div class="api-setup">
-    <p class="section-desc" style="margin-top:0">For shared trader list + shit list. One person creates a bin at <a href="https://jsonbin.io" target="_blank">jsonbin.io</a>, both paste the same Bin ID and Master Key here.</p>
-    <ol style="font-size:13px;color:#5f5e5a;margin:8px 0 12px 18px;padding:0;line-height:1.8">
-      <li>Create free account at jsonbin.io</li>
-      <li>Bins sidebar → + CREATE → content: <code>{"traders":[],"shitlist":[]}</code> → name it → Create</li>
-      <li>Copy the Bin ID from the URL (the long string after <code>/b/</code>)</li>
-      <li>API Keys sidebar → copy Master Key (starts with <code>$2a$10$...</code>)</li>
-      <li>Paste both below. Send both values to PlyBur, he pastes them in his Settings too.</li>
-    </ol>
+    <p class="section-desc" style="margin-top:0">Ask Hunka for the secret digits.</p>
     <div class="form-row">
       <div><label>Bin ID</label><input type="text" id="bin-id" placeholder="e.g. 65a1b2c3d4e5f6..." /></div>
       <div><label>Master Key</label><input type="password" id="bin-key" placeholder="$2a$10$..." /></div>
@@ -229,7 +222,7 @@
   <button onclick="saveSettings()">Save settings</button>
 
   <h3 style="margin-top:28px">About</h3>
-  <p class="section-desc">Stock data crowd-sourced from YATA. Traders/shit list stored in JSONBin (shared with PlyBur). Torn API used for username lookups and market prices. Nothing logged on any server except the shared list contents on JSONBin, which only you and PlyBur can access with the Master Key.</p>
+  <p class="section-desc">Stock data crowd-sourced from YATA. Traders/shit list stored in JSONBin (shared with PlyBur). Torn API is used for username lookups and to calculate profit in the Live Stock tab. Nothing logged on any server except the shared list contents on JSONBin, which only you and PlyBur can access with the Master Key.</p>
 </div>
 
 <div id="toast" class="toast"></div>
