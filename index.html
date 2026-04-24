@@ -1,6 +1,7 @@
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f5f0; color: #2a2a28; line-height: 1.5; }
   h1 { font-size: 22px; font-weight: 500; margin: 0 0 4px; }
+  h2 { font-size: 18px; font-weight: 500; margin: 24px 0 12px; }
   h3 { font-size: 15px; font-weight: 500; margin: 16px 0 8px; }
   .subtitle { color: #5f5e5a; font-size: 14px; margin-bottom: 12px; }
   .status-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -17,19 +18,24 @@
   .tab:focus-visible { outline: 2px solid #534AB7; outline-offset: -2px; }
   .panel { display: none; background: white; padding: 20px; border-radius: 8px; border: 1px solid #d3d1c7; }
   .panel.active { display: block; }
-  .panel.no-padding { padding: 0; overflow: hidden; }
   label { display: block; font-size: 13px; color: #5f5e5a; margin-bottom: 4px; }
-  input, select { font-family: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid #d3d1c7; border-radius: 6px; background: white; color: #2a2a28; box-sizing: border-box; width: 100%; }
-  input:focus, select:focus { outline: none; border-color: #534AB7; }
+  input, select, textarea { font-family: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid #d3d1c7; border-radius: 6px; background: white; color: #2a2a28; box-sizing: border-box; width: 100%; }
+  textarea { min-height: 60px; resize: vertical; line-height: 1.5; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: #534AB7; }
   button { background: #534AB7; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 14px; }
   button:hover { background: #3C3489; }
   button:disabled { background: #B4B2A9; cursor: not-allowed; }
   button.secondary { background: #e8e7e0; color: #2a2a28; }
   button.secondary:hover { background: #d3d1c7; }
+  button.small { padding: 4px 10px; font-size: 12px; }
+  button.danger { background: transparent; color: #A32D2D; padding: 4px 8px; font-size: 12px; }
+  button.danger:hover { background: #FCEBEB; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { text-align: left; padding: 8px; background: #f5f5f0; border-bottom: 1px solid #d3d1c7; font-weight: 500; color: #5f5e5a; white-space: nowrap; }
-  td { padding: 8px; border-bottom: 1px solid #e8e7e0; }
+  td { padding: 8px; border-bottom: 1px solid #e8e7e0; vertical-align: top; }
   tr:hover td { background: #faf9f5; }
+  td a { color: #534AB7; text-decoration: none; font-weight: 500; }
+  td a:hover { text-decoration: underline; }
   .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 12px; }
   .hint { font-size: 12px; color: #888780; margin-top: 2px; }
   .section-desc { font-size: 13px; color: #5f5e5a; margin-bottom: 12px; }
@@ -43,31 +49,32 @@
   .filter-bar > div { min-width: 120px; }
   .filter-bar input, .filter-bar select { width: auto; }
   .api-setup { background: #faf9f5; padding: 16px; border-radius: 8px; border: 1px solid #d3d1c7; margin-bottom: 20px; }
-  .toast { position: fixed; bottom: 20px; right: 20px; background: #2a2a28; color: white; padding: 10px 16px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 1000; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: #2a2a28; color: white; padding: 10px 16px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 1000; max-width: 320px; }
   .toast.show { opacity: 1; }
   code { background: #F1EFE8; padding: 1px 4px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; }
   .data-source-note { font-size: 12px; color: #888780; padding: 8px 12px; background: #faf9f5; border-radius: 6px; margin-bottom: 12px; }
-  .te-controls { padding: 20px; background: #faf9f5; border-bottom: 1px solid #d3d1c7; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  .te-controls a { display: inline-block; background: #534AB7; color: white; padding: 8px 14px; border-radius: 6px; text-decoration: none; font-size: 14px; }
-  .te-controls a:hover { background: #3C3489; }
-  .te-controls a.secondary { background: #e8e7e0; color: #2a2a28; }
-  .te-controls a.secondary:hover { background: #d3d1c7; }
-  .te-frame { width: 100%; height: 1200px; border: none; display: block; background: white; }
-  .te-fallback { padding: 40px 20px; text-align: center; display: none; }
-  .te-fallback h3 { margin-top: 0; }
-  .te-fallback ul { text-align: left; max-width: 600px; margin: 20px auto; line-height: 1.8; }
-  .quick-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin: 16px 0; }
-  .quick-link { display: block; padding: 10px 14px; background: white; border: 1px solid #d3d1c7; border-radius: 6px; text-decoration: none; color: #2a2a28; font-size: 13px; text-align: left; }
-  .quick-link:hover { background: #faf9f5; border-color: #534AB7; }
-  .quick-link strong { display: block; font-weight: 500; }
-  .quick-link span { font-size: 11px; color: #888780; }
+  .add-form { background: #faf9f5; padding: 16px; border-radius: 8px; border: 1px solid #d3d1c7; margin-bottom: 16px; display: none; }
+  .add-form.open { display: block; }
+  .section-header { display: flex; justify-content: space-between; align-items: center; margin: 24px 0 12px; border-bottom: 1px solid #d3d1c7; padding-bottom: 8px; }
+  .section-header h2 { margin: 0; border: none; padding: 0; }
+  .section-header button { font-size: 12px; padding: 6px 12px; }
+  .shit-flag { display: inline-block; background: #FCEBEB; color: #791F1F; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 500; margin-left: 6px; }
+  .trader-name { font-weight: 500; }
+  .action-links { white-space: nowrap; font-size: 12px; }
+  .action-links a { margin-right: 8px; }
+  .tag-pill { display: inline-block; background: #F1EFE8; padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-right: 4px; }
+  .source-pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+  .source-me { background: #EAF3DE; color: #27500A; }
+  .source-plybur { background: #FDE8D9; color: #8A3D13; }
+  .source-hearsay { background: #F1EFE8; color: #5F5E5A; }
 </style>
 
 <h1>Torn Travel Tracker</h1>
-<p class="subtitle">Live stock · trader directory · settings</p>
+<p class="subtitle">Live stock · trader directory · shit list · settings</p>
 <div class="status-bar">
   <span id="yata-status" class="status-chip warn">YATA: not loaded</span>
   <span id="torn-status" class="status-chip warn">Torn API: no key</span>
+  <span id="sync-status" class="status-chip warn">Sync: not configured</span>
 </div>
 
 <div class="tabs">
@@ -78,12 +85,11 @@
 
 <div id="live" class="panel active">
   <div class="data-source-note">
-    Stock data from <strong>YATA</strong> (community-maintained). Market prices from <strong>Torn API</strong>. Cached 5 min to respect YATA's rate limit.
+    Stock data from <strong>YATA</strong>. Market prices from <strong>Torn API</strong>. Cached 5 min.
   </div>
   <div class="filter-bar">
     <button onclick="refreshAll()" id="refresh-btn">Refresh data</button>
-    <div>
-      <label>Sort by</label>
+    <div><label>Sort by</label>
       <select id="live-sort" onchange="renderLiveStock()">
         <option value="profit">Profit/hour</option>
         <option value="stock">Stock level</option>
@@ -91,62 +97,126 @@
         <option value="country">Country</option>
       </select>
     </div>
-    <div>
-      <label>Min stock</label>
-      <input type="number" id="live-min-stock" value="0" style="width:90px" onchange="renderLiveStock()" />
-    </div>
-    <div>
-      <label>Capacity</label>
-      <input type="number" id="live-capacity" value="19" style="width:80px" onchange="renderLiveStock()" />
-    </div>
-    <div>
-      <label>Country</label>
-      <select id="live-country" onchange="renderLiveStock()">
-        <option value="all">All countries</option>
-      </select>
+    <div><label>Min stock</label><input type="number" id="live-min-stock" value="0" style="width:90px" onchange="renderLiveStock()" /></div>
+    <div><label>Capacity</label><input type="number" id="live-capacity" value="19" style="width:80px" onchange="renderLiveStock()" /></div>
+    <div><label>Country</label>
+      <select id="live-country" onchange="renderLiveStock()"><option value="all">All countries</option></select>
     </div>
   </div>
   <p class="hint" id="last-refresh">No data yet</p>
   <div id="live-table-container"></div>
 </div>
 
-<div id="traders" class="panel no-padding">
-  <div class="te-controls">
-    <a href="https://www.tornexchange.com/listings" target="_blank" rel="noopener">Open TornExchange (listings) ↗</a>
-    <a href="https://www.tornexchange.com/" target="_blank" rel="noopener" class="secondary">Top traders ↗</a>
-    <div style="flex:1"></div>
-    <span class="hint">Embed below may or may not load — if not, use the buttons above</span>
+<div id="traders" class="panel">
+  <div id="sync-unconfigured-banner" style="display:none" class="data-source-note">
+    <strong>Shared lists not configured.</strong> Go to Settings and set up JSONBin to share this with PlyBur. Until then, lists are empty.
   </div>
-  <iframe id="te-frame" class="te-frame" src="https://www.tornexchange.com/listings"></iframe>
-  <div id="te-fallback" class="te-fallback">
-    <h3>TornExchange can't be embedded here</h3>
-    <p class="section-desc">The site blocks being loaded inside other pages (a standard security measure). Use the buttons above to open it in a new tab — or use these quick links to the top 30 traders from the last 30 days:</p>
-    <div class="quick-links" id="top-traders-links"></div>
-    <p class="hint">Tip: Right-click any link and open in a new tab to compare prices across multiple traders.</p>
+
+  <!-- Our Traders section -->
+  <div class="section-header">
+    <h2>Our traders</h2>
+    <div>
+      <button class="small" onclick="syncNow()" id="sync-now-btn">Refresh from cloud</button>
+      <button class="small" onclick="toggleTraderForm()">+ Add trader</button>
+    </div>
   </div>
+
+  <div class="add-form" id="trader-form">
+    <div class="form-row">
+      <div style="grid-column: span 2">
+        <label>Torn profile URL</label>
+        <input type="text" id="trader-url" placeholder="https://www.torn.com/profiles.php?XID=1234567" />
+        <div class="hint">Paste the full Torn profile URL. I'll look up the username via Torn API.</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div><label>Tags (comma-separated)</label><input type="text" id="trader-tags" placeholder="Fast, Fair prices" /></div>
+      <div><label>Buys</label><input type="text" id="trader-buys" placeholder="Plushies, flowers" /></div>
+    </div>
+    <div class="form-row">
+      <div style="grid-column: 1 / -1"><label>Note</label><textarea id="trader-note" placeholder="Anything worth remembering"></textarea></div>
+    </div>
+    <button onclick="addTrader()" id="add-trader-btn">Save trader</button>
+    <button class="secondary" onclick="toggleTraderForm()">Cancel</button>
+  </div>
+
+  <div id="traders-table-container"></div>
+
+  <!-- Shit list section -->
+  <div class="section-header">
+    <h2>Shit list</h2>
+    <button class="small" onclick="toggleShitForm()">+ Add entry</button>
+  </div>
+
+  <div class="add-form" id="shit-form">
+    <div class="form-row">
+      <div style="grid-column: span 2">
+        <label>Torn profile URL</label>
+        <input type="text" id="shit-url" placeholder="https://www.torn.com/profiles.php?XID=1234567" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div><label>Date</label><input type="date" id="shit-date" /></div>
+      <div><label>Source</label>
+        <select id="shit-source">
+          <option value="me">Me</option>
+          <option value="plybur">PlyBur</option>
+          <option value="hearsay">Hearsay</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div style="grid-column: 1 / -1"><label>What happened</label><textarea id="shit-what" placeholder="Mugged me after accepting trade, ghosted mid-deal, etc."></textarea></div>
+    </div>
+    <button onclick="addShit()" id="add-shit-btn">Save entry</button>
+    <button class="secondary" onclick="toggleShitForm()">Cancel</button>
+  </div>
+
+  <div id="shit-table-container"></div>
+
+  <!-- TE top 30 section -->
+  <div class="section-header">
+    <h2>Top 30 on TornExchange</h2>
+    <div>
+      <a href="https://www.tornexchange.com/listings" target="_blank" rel="noopener" style="font-size:12px;text-decoration:none;color:#534AB7">Search item on TE ↗</a>
+    </div>
+  </div>
+  <p class="section-desc">Last 30 days of activity. Click a name for their price list.</p>
+  <div id="te-top-container"></div>
 </div>
 
 <div id="settings" class="panel">
-  <h3>Torn API (optional — for market prices)</h3>
+  <h3>Torn API</h3>
   <div class="api-setup">
-    <p class="section-desc" style="margin-top:0">A Public-level API key gives us current market prices for profit calculations in the Live Stock tab. Get one at <code>torn.com</code> → Settings → API Key. Key stored only in your browser.</p>
+    <p class="section-desc" style="margin-top:0">Your Public-level API key. Required to look up trader names when you paste a profile URL. Get one at <code>torn.com</code> → Settings → API Key.</p>
     <div class="form-row">
-      <div>
-        <label>API key (16 characters)</label>
-        <input type="password" id="api-key" placeholder="Paste your Torn API key" />
-      </div>
-      <div>
-        <label>&nbsp;</label>
-        <button onclick="saveApiKey()">Save & test</button>
-      </div>
+      <div><label>API key (16 characters)</label><input type="password" id="api-key" placeholder="Paste your Torn API key" /></div>
+      <div><label>&nbsp;</label><button onclick="saveApiKey()">Save & test</button></div>
     </div>
     <button class="secondary" onclick="clearApiKey()">Remove key</button>
   </div>
 
+  <h3>Shared lists with PlyBur (JSONBin)</h3>
+  <div class="api-setup">
+    <p class="section-desc" style="margin-top:0">For shared trader list + shit list. One person creates a bin at <a href="https://jsonbin.io" target="_blank">jsonbin.io</a>, both paste the same Bin ID and Master Key here.</p>
+    <ol style="font-size:13px;color:#5f5e5a;margin:8px 0 12px 18px;padding:0;line-height:1.8">
+      <li>Create free account at jsonbin.io</li>
+      <li>Bins sidebar → + CREATE → content: <code>{"traders":[],"shitlist":[]}</code> → name it → Create</li>
+      <li>Copy the Bin ID from the URL (the long string after <code>/b/</code>)</li>
+      <li>API Keys sidebar → copy Master Key (starts with <code>$2a$10$...</code>)</li>
+      <li>Paste both below. Send both values to PlyBur, he pastes them in his Settings too.</li>
+    </ol>
+    <div class="form-row">
+      <div><label>Bin ID</label><input type="text" id="bin-id" placeholder="e.g. 65a1b2c3d4e5f6..." /></div>
+      <div><label>Master Key</label><input type="password" id="bin-key" placeholder="$2a$10$..." /></div>
+    </div>
+    <button onclick="saveJsonbin()">Save & test connection</button>
+    <button class="secondary" onclick="clearJsonbin()">Remove credentials</button>
+  </div>
+
   <h3>Travel preferences</h3>
   <div class="form-row">
-    <div>
-      <label>Travel method</label>
+    <div><label>Travel method</label>
       <select id="travel-method">
         <option value="0.7" selected>PI + airstrip (30% off)</option>
         <option value="0.5">WLT / Business class (50% off)</option>
@@ -154,18 +224,12 @@
         <option value="1.0">Standard</option>
       </select>
     </div>
-    <div>
-      <label>Timezone offset from TCT</label>
-      <input type="number" id="tz-offset" value="-7" />
-      <div class="hint">PDT = -7, PST = -8</div>
-    </div>
+    <div><label>Timezone offset from TCT</label><input type="number" id="tz-offset" value="-7" /><div class="hint">PDT = -7, PST = -8</div></div>
   </div>
   <button onclick="saveSettings()">Save settings</button>
 
   <h3 style="margin-top:28px">About</h3>
-  <p class="section-desc">
-    Foreign stock data crowd-sourced from YATA (the source used by TornPDA, TornTools, and torntravel). Trader directory links to TornExchange. Nothing is logged or stored on any server — all your data stays in this browser.
-  </p>
+  <p class="section-desc">Stock data crowd-sourced from YATA. Traders/shit list stored in JSONBin (shared with PlyBur). Torn API used for username lookups and market prices. Nothing logged on any server except the shared list contents on JSONBin, which only you and PlyBur can access with the Master Key.</p>
 </div>
 
 <div id="toast" class="toast"></div>
@@ -185,47 +249,49 @@ const DESTINATIONS = [
   { name: 'South Africa', standardMin: 297, yataCodes: ['sou', 'south africa'] }
 ];
 
-const TOP_TRADERS = [
-  { name: 'Muckamuck', trades: 5333 },
-  { name: 'begaydocrimes', trades: 2161 },
-  { name: 'FrostyTheXanMan', trades: 2133 },
-  { name: 'LMN_OP', trades: 2079 },
-  { name: 'M4rshmall0w', trades: 1774 },
-  { name: 'Dracula', trades: 1628 },
-  { name: 'Friends', trades: 1610 },
-  { name: 'xeven', trades: 1380 },
-  { name: 'SavageGrace', trades: 1159 },
-  { name: 'VexRemington', trades: 1089 },
-  { name: 'iSonicV', trades: 951 },
-  { name: 'Turkeybop6141', trades: 946 },
-  { name: 'MKBBGL', trades: 893 },
-  { name: 'Smez', trades: 872 },
-  { name: 'badfriend', trades: 742 },
-  { name: '-Josh-', trades: 728 },
-  { name: 'Emsilo', trades: 715 },
-  { name: 'AltairYanyan', trades: 691 },
-  { name: 'ankitjainaj', trades: 662 },
-  { name: 'the_khush', trades: 603 },
-  { name: 'Minitamark', trades: 566 },
-  { name: 'WhackedMaki', trades: 555 },
-  { name: 'joshieb', trades: 543 },
-  { name: 'Drunkinahole', trades: 527 },
-  { name: 'OldGoat', trades: 526 },
-  { name: 'Trivia-', trades: 509 },
-  { name: 'Prophecy', trades: 504 },
-  { name: '04doolant', trades: 504 },
-  { name: 'BlueChedow', trades: 492 },
-  { name: 'Heartflower', trades: 486 }
+const TE_TOP_30 = [
+  { rank: 1, name: 'Muckamuck', trades: 5333 },
+  { rank: 2, name: 'begaydocrimes', trades: 2161 },
+  { rank: 3, name: 'FrostyTheXanMan', trades: 2133 },
+  { rank: 4, name: 'LMN_OP', trades: 2079 },
+  { rank: 5, name: 'M4rshmall0w', trades: 1774 },
+  { rank: 6, name: 'Dracula', trades: 1628 },
+  { rank: 7, name: 'Friends', trades: 1610 },
+  { rank: 8, name: 'xeven', trades: 1380 },
+  { rank: 9, name: 'SavageGrace', trades: 1159 },
+  { rank: 10, name: 'VexRemington', trades: 1089 },
+  { rank: 11, name: 'iSonicV', trades: 951 },
+  { rank: 12, name: 'Turkeybop6141', trades: 946 },
+  { rank: 13, name: 'MKBBGL', trades: 893 },
+  { rank: 14, name: 'Smez', trades: 872 },
+  { rank: 15, name: 'badfriend', trades: 742 },
+  { rank: 16, name: '-Josh-', trades: 728 },
+  { rank: 17, name: 'Emsilo', trades: 715 },
+  { rank: 18, name: 'AltairYanyan', trades: 691 },
+  { rank: 19, name: 'ankitjainaj', trades: 662 },
+  { rank: 20, name: 'the_khush', trades: 603 },
+  { rank: 21, name: 'Minitamark', trades: 566 },
+  { rank: 22, name: 'WhackedMaki', trades: 555 },
+  { rank: 23, name: 'joshieb', trades: 543 },
+  { rank: 24, name: 'Drunkinahole', trades: 527 },
+  { rank: 25, name: 'OldGoat', trades: 526 },
+  { rank: 26, name: 'Trivia-', trades: 509 },
+  { rank: 27, name: 'Prophecy', trades: 504 },
+  { rank: 28, name: '04doolant', trades: 504 },
+  { rank: 29, name: 'BlueChedow', trades: 492 },
+  { rank: 30, name: 'Heartflower', trades: 486 }
 ];
 
 const YATA_CACHE_MINUTES = 5;
 
 let state = {
-  settings: { tzOffset: -7, travelMethod: 0.7, apiKey: '' },
-  yataData: null,
-  yataFetchedAt: null,
-  itemsData: null,
-  itemsFetchedAt: null
+  settings: { tzOffset: -7, travelMethod: 0.7, apiKey: '', binId: '', binKey: '' },
+  yataData: null, yataFetchedAt: null,
+  itemsData: null, itemsFetchedAt: null,
+  // Shared data:
+  traders: [],
+  shitlist: [],
+  lastSynced: null
 };
 
 function load() {
@@ -242,22 +308,370 @@ function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
+  setTimeout(() => t.classList.remove('show'), 3000);
 }
 
+function fmt(n) { return new Intl.NumberFormat().format(n); }
+
+// ============ TORN API HELPERS ============
+function parseTornUrl(url) {
+  // Matches profiles.php?XID=12345 or similar
+  const m = (url || '').match(/XID=(\d+)/i) || (url || '').match(/[?&]ID=(\d+)/i);
+  return m ? m[1] : null;
+}
+
+async function lookupTornUser(tornId) {
+  if (!state.settings.apiKey) {
+    throw new Error('Torn API key not set. Go to Settings.');
+  }
+  const resp = await fetch(`https://api.torn.com/user/${tornId}?selections=basic&key=${state.settings.apiKey}`);
+  const data = await resp.json();
+  if (data.error) throw new Error(`Torn API: ${data.error.error}`);
+  return { id: tornId, name: data.name, level: data.level };
+}
+
+// ============ JSONBIN SYNC ============
+async function jsonbinRead() {
+  if (!state.settings.binId || !state.settings.binKey) return null;
+  const resp = await fetch(`https://api.jsonbin.io/v3/b/${state.settings.binId}/latest`, {
+    headers: { 'X-Master-Key': state.settings.binKey }
+  });
+  if (!resp.ok) throw new Error(`JSONBin read failed: ${resp.status}`);
+  const data = await resp.json();
+  return data.record;
+}
+
+async function jsonbinWrite() {
+  if (!state.settings.binId || !state.settings.binKey) return false;
+  const resp = await fetch(`https://api.jsonbin.io/v3/b/${state.settings.binId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Master-Key': state.settings.binKey
+    },
+    body: JSON.stringify({ traders: state.traders, shitlist: state.shitlist })
+  });
+  if (!resp.ok) throw new Error(`JSONBin write failed: ${resp.status}`);
+  return true;
+}
+
+async function syncNow() {
+  const btn = document.getElementById('sync-now-btn');
+  if (btn) { btn.textContent = 'Syncing...'; btn.disabled = true; }
+  try {
+    const record = await jsonbinRead();
+    if (record) {
+      state.traders = record.traders || [];
+      state.shitlist = record.shitlist || [];
+      state.lastSynced = new Date().toISOString();
+      save();
+      updateSyncStatus();
+      renderTradersTab();
+      toast('Synced');
+    }
+  } catch(e) {
+    console.error(e);
+    toast('Sync failed: ' + e.message);
+  }
+  if (btn) { btn.textContent = 'Refresh from cloud'; btn.disabled = false; }
+}
+
+async function syncPush() {
+  try {
+    await jsonbinWrite();
+    state.lastSynced = new Date().toISOString();
+    save();
+    updateSyncStatus();
+  } catch(e) {
+    console.error(e);
+    toast('Cloud save failed — saved locally only: ' + e.message);
+  }
+}
+
+function updateSyncStatus() {
+  const el = document.getElementById('sync-status');
+  if (!state.settings.binId || !state.settings.binKey) {
+    el.className = 'status-chip warn';
+    el.textContent = 'Sync: not configured';
+    const banner = document.getElementById('sync-unconfigured-banner');
+    if (banner) banner.style.display = 'block';
+    return;
+  }
+  const banner = document.getElementById('sync-unconfigured-banner');
+  if (banner) banner.style.display = 'none';
+  if (!state.lastSynced) {
+    el.className = 'status-chip warn';
+    el.textContent = 'Sync: never';
+    return;
+  }
+  const ageMin = (Date.now() - new Date(state.lastSynced)) / 60000;
+  el.className = 'status-chip good';
+  el.textContent = ageMin < 1 ? 'Sync: just now' : `Sync: ${Math.round(ageMin)}m ago`;
+}
+
+async function saveJsonbin() {
+  const binId = document.getElementById('bin-id').value.trim();
+  const binKey = document.getElementById('bin-key').value.trim();
+  if (!binId || !binKey) { toast('Both Bin ID and Master Key required'); return; }
+  state.settings.binId = binId;
+  state.settings.binKey = binKey;
+  save();
+  toast('Testing connection...');
+  try {
+    const record = await jsonbinRead();
+    if (record) {
+      state.traders = record.traders || [];
+      state.shitlist = record.shitlist || [];
+      state.lastSynced = new Date().toISOString();
+      save();
+      updateSyncStatus();
+      renderTradersTab();
+      toast('Connected. Loaded ' + state.traders.length + ' traders, ' + state.shitlist.length + ' shit list.');
+    }
+  } catch(e) {
+    toast('Connection test failed: ' + e.message);
+  }
+}
+
+function clearJsonbin() {
+  state.settings.binId = '';
+  state.settings.binKey = '';
+  state.lastSynced = null;
+  save();
+  document.getElementById('bin-id').value = '';
+  document.getElementById('bin-key').value = '';
+  updateSyncStatus();
+  toast('JSONBin credentials removed');
+}
+
+// ============ TRADERS ============
+function toggleTraderForm() {
+  const f = document.getElementById('trader-form');
+  f.classList.toggle('open');
+  if (f.classList.contains('open')) {
+    document.getElementById('trader-url').focus();
+  }
+}
+
+async function addTrader() {
+  const url = document.getElementById('trader-url').value.trim();
+  const tags = document.getElementById('trader-tags').value.trim();
+  const buys = document.getElementById('trader-buys').value.trim();
+  const note = document.getElementById('trader-note').value.trim();
+
+  const tornId = parseTornUrl(url);
+  if (!tornId) { toast("Couldn't find an ID in that URL"); return; }
+
+  // Check against shit list
+  const onShitList = state.shitlist.find(s => s.tornId === tornId);
+  if (onShitList) {
+    const confirmed = confirm(`⚠ This person is on the shit list:\n\n"${onShitList.what}"\n(${onShitList.source}, ${onShitList.date})\n\nAdd to Our Traders anyway?`);
+    if (!confirmed) return;
+  }
+
+  const btn = document.getElementById('add-trader-btn');
+  btn.textContent = 'Looking up...';
+  btn.disabled = true;
+
+  try {
+    const userInfo = await lookupTornUser(tornId);
+    // Check for dup
+    const exists = state.traders.find(t => t.tornId === tornId);
+    if (exists) {
+      toast(`${userInfo.name} is already in Our Traders`);
+      btn.textContent = 'Save trader';
+      btn.disabled = false;
+      return;
+    }
+    state.traders.push({
+      id: Date.now(),
+      tornId,
+      name: userInfo.name,
+      tags, buys, note,
+      addedAt: new Date().toISOString()
+    });
+    save();
+    await syncPush();
+    ['trader-url','trader-tags','trader-buys','trader-note'].forEach(id => document.getElementById(id).value = '');
+    toggleTraderForm();
+    renderTradersTab();
+    toast(`Added ${userInfo.name}`);
+  } catch(e) {
+    toast('Failed: ' + e.message);
+  }
+
+  btn.textContent = 'Save trader';
+  btn.disabled = false;
+}
+
+async function deleteTrader(id) {
+  if (!confirm('Remove this trader?')) return;
+  state.traders = state.traders.filter(t => t.id !== id);
+  save();
+  await syncPush();
+  renderTradersTab();
+  toast('Removed');
+}
+
+function renderTraders() {
+  const container = document.getElementById('traders-table-container');
+  if (state.traders.length === 0) {
+    container.innerHTML = '<div class="empty-state">No traders yet. Click "Add trader" to get started.</div>';
+    return;
+  }
+  const rows = [...state.traders].sort((a, b) => a.name.localeCompare(b.name));
+  container.innerHTML = `<table>
+    <thead><tr>
+      <th>Trader</th><th>Tags</th><th>Buys</th><th>Note</th><th>Links</th><th></th>
+    </tr></thead>
+    <tbody>${rows.map(t => {
+      const onShitList = state.shitlist.find(s => s.tornId === t.tornId);
+      return `<tr>
+        <td>
+          <div class="trader-name">${escapeHtml(t.name)}${onShitList ? '<span class="shit-flag">⚠ on shit list</span>' : ''}</div>
+          <div class="hint">ID: ${t.tornId}</div>
+        </td>
+        <td>${(t.tags || '').split(',').filter(x => x.trim()).map(x => `<span class="tag-pill">${escapeHtml(x.trim())}</span>`).join('')}</td>
+        <td>${escapeHtml(t.buys || '—')}</td>
+        <td style="max-width:300px">${escapeHtml(t.note || '—')}</td>
+        <td class="action-links">
+          <a href="https://www.tornexchange.com/prices/${encodeURIComponent(t.name)}/" target="_blank" rel="noopener">TE prices ↗</a>
+          <a href="https://www.torn.com/profiles.php?XID=${t.tornId}" target="_blank" rel="noopener">Torn profile ↗</a>
+        </td>
+        <td><button class="danger" onclick="deleteTrader(${t.id})">Delete</button></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+// ============ SHIT LIST ============
+function toggleShitForm() {
+  const f = document.getElementById('shit-form');
+  f.classList.toggle('open');
+  if (f.classList.contains('open')) {
+    document.getElementById('shit-url').focus();
+    if (!document.getElementById('shit-date').value) {
+      document.getElementById('shit-date').value = new Date().toISOString().slice(0,10);
+    }
+  }
+}
+
+async function addShit() {
+  const url = document.getElementById('shit-url').value.trim();
+  const date = document.getElementById('shit-date').value;
+  const source = document.getElementById('shit-source').value;
+  const what = document.getElementById('shit-what').value.trim();
+
+  const tornId = parseTornUrl(url);
+  if (!tornId) { toast("Couldn't find an ID in that URL"); return; }
+  if (!what) { toast('Describe what happened'); return; }
+  if (!date) { toast('Pick a date'); return; }
+
+  const btn = document.getElementById('add-shit-btn');
+  btn.textContent = 'Looking up...';
+  btn.disabled = true;
+
+  try {
+    const userInfo = await lookupTornUser(tornId);
+    const exists = state.shitlist.find(s => s.tornId === tornId);
+    if (exists) {
+      if (!confirm(`${userInfo.name} already on shit list. Add another entry?`)) {
+        btn.textContent = 'Save entry';
+        btn.disabled = false;
+        return;
+      }
+    }
+    state.shitlist.push({
+      id: Date.now(),
+      tornId,
+      name: userInfo.name,
+      what, date, source,
+      addedAt: new Date().toISOString()
+    });
+    save();
+    await syncPush();
+    ['shit-url','shit-what'].forEach(id => document.getElementById(id).value = '');
+    toggleShitForm();
+    renderTradersTab();
+    toast(`Added ${userInfo.name} to shit list`);
+  } catch(e) {
+    toast('Failed: ' + e.message);
+  }
+
+  btn.textContent = 'Save entry';
+  btn.disabled = false;
+}
+
+async function deleteShit(id) {
+  if (!confirm('Remove this shit list entry?')) return;
+  state.shitlist = state.shitlist.filter(s => s.id !== id);
+  save();
+  await syncPush();
+  renderTradersTab();
+  toast('Removed');
+}
+
+function renderShitList() {
+  const container = document.getElementById('shit-table-container');
+  if (state.shitlist.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding:20px">No entries. Good day so far.</div>';
+    return;
+  }
+  const rows = [...state.shitlist].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  container.innerHTML = `<table>
+    <thead><tr>
+      <th>Name</th><th>What happened</th><th>Date</th><th>Source</th><th>Link</th><th></th>
+    </tr></thead>
+    <tbody>${rows.map(s => {
+      const sourceCls = s.source === 'me' ? 'source-me' : s.source === 'plybur' ? 'source-plybur' : 'source-hearsay';
+      const sourceLabel = s.source === 'me' ? 'Me' : s.source === 'plybur' ? 'PlyBur' : 'Hearsay';
+      return `<tr>
+        <td>
+          <div class="trader-name">${escapeHtml(s.name)}</div>
+          <div class="hint">ID: ${s.tornId}</div>
+        </td>
+        <td style="max-width:400px">${escapeHtml(s.what)}</td>
+        <td class="num">${s.date}</td>
+        <td><span class="source-pill ${sourceCls}">${sourceLabel}</span></td>
+        <td class="action-links"><a href="https://www.torn.com/profiles.php?XID=${s.tornId}" target="_blank" rel="noopener">Torn profile ↗</a></td>
+        <td><button class="danger" onclick="deleteShit(${s.id})">Delete</button></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+// ============ TE TOP 30 ============
+function renderTeTop() {
+  const container = document.getElementById('te-top-container');
+  container.innerHTML = `<table>
+    <thead><tr><th>Rank</th><th>Trader</th><th class="num">Trades / 30d</th><th>Price list</th></tr></thead>
+    <tbody>${TE_TOP_30.map(t => {
+      // Check if this name matches anyone on our shit list (by name, not ID, since we don't have IDs here)
+      const onShit = state.shitlist.find(s => s.name.toLowerCase() === t.name.toLowerCase());
+      return `<tr>
+        <td class="num">#${t.rank}</td>
+        <td><strong>${escapeHtml(t.name)}</strong>${onShit ? '<span class="shit-flag">⚠ on shit list</span>' : ''}</td>
+        <td class="num">${t.trades.toLocaleString()}</td>
+        <td><a href="https://www.tornexchange.com/prices/${encodeURIComponent(t.name)}/" target="_blank" rel="noopener">View prices ↗</a></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function renderTradersTab() {
+  renderTraders();
+  renderShitList();
+  renderTeTop();
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============ EXISTING: LIVE STOCK, SETTINGS ============
 function populateDestDropdown() {
   const countrySel = document.getElementById('live-country');
   countrySel.innerHTML = '<option value="all">All countries</option>' + DESTINATIONS.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
-}
-
-function renderTopTraders() {
-  const container = document.getElementById('top-traders-links');
-  container.innerHTML = TOP_TRADERS.map(t =>
-    `<a href="https://www.tornexchange.com/prices/${encodeURIComponent(t.name)}/" target="_blank" rel="noopener" class="quick-link">
-      <strong>${t.name}</strong>
-      <span>${t.trades.toLocaleString()} trades / 30 days</span>
-    </a>`
-  ).join('');
 }
 
 function initSettings() {
@@ -267,7 +681,10 @@ function initSettings() {
     document.getElementById('api-key').value = state.settings.apiKey;
     setTornStatus('good', 'Torn API: key set');
   }
+  if (state.settings.binId) document.getElementById('bin-id').value = state.settings.binId;
+  if (state.settings.binKey) document.getElementById('bin-key').value = state.settings.binKey;
   updateYataStatus();
+  updateSyncStatus();
 }
 
 function setTornStatus(level, msg) {
@@ -301,11 +718,7 @@ async function saveApiKey() {
   try {
     const resp = await fetch(`https://api.torn.com/key/?selections=info&key=${key}`);
     const data = await resp.json();
-    if (data.error) {
-      setTornStatus('bad', `Torn API error: ${data.error.error}`);
-      toast('Key test failed');
-      return;
-    }
+    if (data.error) { setTornStatus('bad', `Torn API error: ${data.error.error}`); toast('Key test failed'); return; }
     state.settings.apiKey = key;
     save();
     setTornStatus('good', 'Torn API: connected');
@@ -328,24 +741,16 @@ function clearApiKey() {
 async function fetchYataStock() {
   if (state.yataData && state.yataFetchedAt) {
     const ageMin = (Date.now() - new Date(state.yataFetchedAt)) / 60000;
-    if (ageMin < YATA_CACHE_MINUTES) {
-      toast(`Cached YATA data (${Math.round(ageMin)}m old)`);
-      return true;
-    }
+    if (ageMin < YATA_CACHE_MINUTES) { toast(`Cached YATA data (${Math.round(ageMin)}m old)`); return true; }
   }
   try {
     const resp = await fetch('https://yata.yt/api/v1/travel/export/');
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    state.yataData = data;
+    state.yataData = await resp.json();
     state.yataFetchedAt = new Date().toISOString();
     save();
     return true;
-  } catch(e) {
-    console.error('YATA fetch error:', e);
-    toast('YATA fetch failed: ' + e.message);
-    return false;
-  }
+  } catch(e) { console.error(e); toast('YATA fetch failed: ' + e.message); return false; }
 }
 
 async function fetchTornItems() {
@@ -357,15 +762,12 @@ async function fetchTornItems() {
   try {
     const resp = await fetch(`https://api.torn.com/torn/?selections=items&key=${state.settings.apiKey}`);
     const data = await resp.json();
-    if (data.error) { console.error('Torn items error:', data.error); return false; }
+    if (data.error) return false;
     state.itemsData = data.items;
     state.itemsFetchedAt = new Date().toISOString();
     save();
     return true;
-  } catch(e) {
-    console.error('Torn items fetch error:', e);
-    return false;
-  }
+  } catch(e) { return false; }
 }
 
 async function refreshAll() {
@@ -402,9 +804,7 @@ function extractStockRows() {
     let itemSource = entry.stocks || entry.items || entry;
     if (!itemSource || typeof itemSource !== 'object') continue;
     if (Array.isArray(itemSource)) {
-      for (const item of itemSource) {
-        addRow(rows, countryName, item.id, item, entry);
-      }
+      for (const item of itemSource) addRow(rows, countryName, item.id, item, entry);
     } else {
       for (const itemId in itemSource) {
         const item = itemSource[itemId];
@@ -421,29 +821,15 @@ function addRow(rows, countryName, itemId, item, countryEntry) {
   const cost = item.cost !== undefined ? item.cost : (item.price !== undefined ? item.price : 0);
   const itemInfo = (state.itemsData && state.itemsData[itemId]) || {};
   const itemName = itemInfo.name || item.name || `Item #${itemId}`;
-  const itemType = (itemInfo.type || item.type || '').toLowerCase();
   const marketValue = itemInfo.market_value || item.market_value || 0;
-  rows.push({
-    country: countryName,
-    itemId: String(itemId),
-    itemName, itemType,
-    stock: Number(quantity) || 0,
-    cost: Number(cost) || 0,
-    marketValue: Number(marketValue) || 0
-  });
+  rows.push({ country: countryName, itemId: String(itemId), itemName, stock: Number(quantity) || 0, cost: Number(cost) || 0, marketValue: Number(marketValue) || 0 });
 }
 
 function renderLiveStock() {
   const container = document.getElementById('live-table-container');
-  if (!state.yataData) {
-    container.innerHTML = '<div class="empty-state">Click "Refresh data" above to load foreign stock from YATA.</div>';
-    return;
-  }
+  if (!state.yataData) { container.innerHTML = '<div class="empty-state">Click "Refresh data" to load foreign stock from YATA.</div>'; return; }
   const rows = extractStockRows();
-  if (rows.length === 0) {
-    container.innerHTML = '<div class="empty-state">YATA returned data but no stock rows were parseable.</div>';
-    return;
-  }
+  if (rows.length === 0) { container.innerHTML = '<div class="empty-state">YATA returned data but no rows parseable.</div>'; return; }
   const sortBy = document.getElementById('live-sort').value;
   const minStock = parseInt(document.getElementById('live-min-stock').value) || 0;
   const capacity = parseInt(document.getElementById('live-capacity').value) || 19;
@@ -466,35 +852,22 @@ function renderLiveStock() {
     if (sortBy === 'country') return a.country.localeCompare(b.country) || b.profitPerHour - a.profitPerHour;
   });
 
-  if (enriched.length === 0) {
-    container.innerHTML = '<div class="empty-state">No items match your filters.</div>';
-    return;
-  }
+  if (enriched.length === 0) { container.innerHTML = '<div class="empty-state">No items match your filters.</div>'; return; }
   const hasMarketData = state.itemsData !== null;
-
-  container.innerHTML = `<table>
-    <thead><tr>
-      <th>Country</th><th>Item</th><th>Stock</th><th>Buy</th>
-      ${hasMarketData ? '<th>Market</th><th>Profit/item</th><th>Total (@ cap)</th><th>$/hr</th>' : '<th colspan="4" style="font-weight:400;color:#888780">Add Torn API key in Settings for profit calcs</th>'}
-    </tr></thead>
-    <tbody>${enriched.map(r => {
-      let stockCls = 'stock-good';
-      if (r.stock === 0) stockCls = 'stock-empty';
-      else if (r.stock < 500) stockCls = 'stock-low';
-      const profitCell = hasMarketData
-        ? `<td class="num">$${fmt(r.marketValue)}</td><td class="num">$${fmt(r.profitPerItem)}</td><td class="num">$${fmt(r.totalProfit)}</td><td class="num">$${fmt(r.profitPerHour)}</td>`
-        : '<td colspan="4" style="color:#888780">—</td>';
-      return `<tr>
-        <td>${r.country}</td><td>${r.itemName}</td>
-        <td class="num ${stockCls}">${fmt(r.stock)}</td>
-        <td class="num">$${fmt(r.cost)}</td>
-        ${profitCell}
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
+  container.innerHTML = `<table><thead><tr>
+    <th>Country</th><th>Item</th><th>Stock</th><th>Buy</th>
+    ${hasMarketData ? '<th>Market</th><th>Profit/item</th><th>Total (@ cap)</th><th>$/hr</th>' : '<th colspan="4" style="font-weight:400;color:#888780">Add Torn API key in Settings for profit calcs</th>'}
+  </tr></thead>
+  <tbody>${enriched.map(r => {
+    let stockCls = 'stock-good';
+    if (r.stock === 0) stockCls = 'stock-empty';
+    else if (r.stock < 500) stockCls = 'stock-low';
+    const profitCell = hasMarketData
+      ? `<td class="num">$${fmt(r.marketValue)}</td><td class="num">$${fmt(r.profitPerItem)}</td><td class="num">$${fmt(r.totalProfit)}</td><td class="num">$${fmt(r.profitPerHour)}</td>`
+      : '<td colspan="4" style="color:#888780">—</td>';
+    return `<tr><td>${r.country}</td><td>${escapeHtml(r.itemName)}</td><td class="num ${stockCls}">${fmt(r.stock)}</td><td class="num">$${fmt(r.cost)}</td>${profitCell}</tr>`;
+  }).join('')}</tbody></table>`;
 }
-
-function fmt(n) { return new Intl.NumberFormat().format(n); }
 
 function saveSettings() {
   state.settings.tzOffset = parseFloat(document.getElementById('tz-offset').value) || -7;
@@ -503,44 +876,34 @@ function saveSettings() {
   toast('Settings saved');
 }
 
-setTimeout(() => {
-  const frame = document.getElementById('te-frame');
-  if (frame) {
-    try {
-      if (!frame.contentWindow || frame.contentWindow.location.href === 'about:blank') {
-        showTeFallback();
-      }
-    } catch(e) {
-      showTeFallback();
-    }
-  }
-}, 4000);
-
-function showTeFallback() {
-  const frame = document.getElementById('te-frame');
-  const fallback = document.getElementById('te-fallback');
-  if (frame) frame.style.display = 'none';
-  if (fallback) fallback.style.display = 'block';
-}
-
 function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach(t => {
-    t.classList.toggle('active', t.dataset.tab === tab);
-    t.blur();
-  });
+  document.querySelectorAll('.tab').forEach(t => { t.classList.toggle('active', t.dataset.tab === tab); t.blur(); });
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === tab));
   if (tab === 'live') renderLiveStock();
+  if (tab === 'traders') {
+    renderTradersTab();
+    // Auto-sync on tab open if configured
+    if (state.settings.binId && state.settings.binKey) {
+      const ageMin = state.lastSynced ? (Date.now() - new Date(state.lastSynced)) / 60000 : 999;
+      if (ageMin > 1) syncNow();
+    }
+  }
 }
 
 load();
 populateDestDropdown();
-renderTopTraders();
 initSettings();
 document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
 renderLiveStock();
+renderTradersTab();
 updateYataStatus();
+updateSyncStatus();
 if (state.yataFetchedAt) {
   document.getElementById('last-refresh').textContent = `YATA data fetched: ${new Date(state.yataFetchedAt).toLocaleString()}`;
 }
-setInterval(updateYataStatus, 30000);
+setInterval(() => { updateYataStatus(); updateSyncStatus(); }, 30000);
+// Auto-sync if configured and on traders tab
+if (state.settings.binId && state.settings.binKey) {
+  syncNow();
+}
 </script>
