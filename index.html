@@ -67,6 +67,12 @@
   .source-me { background: #EAF3DE; color: #27500A; }
   .source-plybur { background: #FDE8D9; color: #8A3D13; }
   .source-hearsay { background: #F1EFE8; color: #5F5E5A; }
+  .status-online { color: #27500A; font-weight: 500; }
+  .status-idle { color: #BA7517; font-weight: 500; }
+  .status-offline { color: #888780; }
+  .status-unreachable { color: #791F1F; font-weight: 500; }
+  .status-line { font-size: 12px; margin-top: 2px; }
+  .status-loading { color: #888780; font-size: 12px; font-style: italic; }
 </style>
 
 <h1>Torn Travel Tracker</h1>
@@ -116,10 +122,12 @@
   <div class="section-header">
     <h2>Our traders</h2>
     <div>
+      <button class="small" onclick="checkAllStatus()" id="check-status-btn">Check status</button>
       <button class="small" onclick="syncNow()" id="sync-now-btn">Refresh from cloud</button>
       <button class="small" onclick="toggleTraderForm()">+ Add trader</button>
     </div>
   </div>
+  <p class="hint" id="status-checked-at" style="margin-top:-8px;margin-bottom:12px">Status not checked yet</p>
 
   <div class="add-form" id="trader-form">
     <div class="form-row">
@@ -284,7 +292,10 @@ let state = {
   // Shared data:
   traders: [],
   shitlist: [],
-  lastSynced: null
+  lastSynced: null,
+  // Per-session status (not persisted):
+  statusByTornId: {},
+  statusCheckedAt: null
 };
 
 function load() {
@@ -321,6 +332,99 @@ async function lookupTornUser(tornId) {
   const data = await resp.json();
   if (data.error) throw new Error(`Torn API: ${data.error.error}`);
   return { id: tornId, name: data.name, level: data.level };
+}
+
+async function fetchTornStatus(tornId) {
+  if (!state.settings.apiKey) throw new Error('Torn API key not set');
+  const resp = await fetch(`https://api.torn.com/user/${tornId}?selections=basic&key=${state.settings.apiKey}`);
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error.error);
+  return {
+    lastActionStatus: data.last_action && data.last_action.status,
+    lastActionRelative: data.last_action && data.last_action.relative,
+    lastActionTimestamp: data.last_action && data.last_action.timestamp,
+    state: data.status && data.status.state,
+    stateDescription: data.status && data.status.description
+  };
+}
+
+async function checkAllStatus() {
+  if (!state.settings.apiKey) {
+    toast('Torn API key required. Set it in Settings.');
+    return;
+  }
+  if (state.traders.length === 0) {
+    toast('No traders to check');
+    return;
+  }
+  const btn = document.getElementById('check-status-btn');
+  btn.textContent = 'Checking...';
+  btn.disabled = true;
+
+  // Mark all as loading
+  state.traders.forEach(t => {
+    state.statusByTornId[t.tornId] = { loading: true };
+  });
+  renderTraders();
+
+  // Fetch in parallel
+  const results = await Promise.allSettled(
+    state.traders.map(t => fetchTornStatus(t.tornId).then(s => ({ tornId: t.tornId, status: s })))
+  );
+
+  results.forEach((r, i) => {
+    const tornId = state.traders[i].tornId;
+    if (r.status === 'fulfilled') {
+      state.statusByTornId[tornId] = r.value.status;
+    } else {
+      state.statusByTornId[tornId] = { error: r.reason.message || 'Failed' };
+    }
+  });
+
+  state.statusCheckedAt = new Date().toISOString();
+  renderTraders();
+  updateStatusCheckedLabel();
+  btn.textContent = 'Check status';
+  btn.disabled = false;
+
+  const failed = results.filter(r => r.status === 'rejected').length;
+  if (failed > 0) {
+    toast(`Checked ${results.length - failed}/${results.length} (${failed} failed)`);
+  } else {
+    toast(`Checked ${results.length} trader${results.length !== 1 ? 's' : ''}`);
+  }
+}
+
+function updateStatusCheckedLabel() {
+  const el = document.getElementById('status-checked-at');
+  if (!el) return;
+  if (!state.statusCheckedAt) {
+    el.textContent = 'Status not checked yet';
+    return;
+  }
+  const ageSec = Math.round((Date.now() - new Date(state.statusCheckedAt)) / 1000);
+  const ageText = ageSec < 60 ? `${ageSec}s ago` : `${Math.round(ageSec / 60)}m ago`;
+  el.textContent = `Status checked ${ageText}`;
+}
+
+function renderStatusCell(tornId) {
+  const s = state.statusByTornId[tornId];
+  if (!s) return '';
+  if (s.loading) return '<div class="status-line status-loading">Checking...</div>';
+  if (s.error) return `<div class="status-line status-offline">Error: ${escapeHtml(s.error)}</div>`;
+
+  let dot, cls, text;
+  if (s.lastActionStatus === 'Online') { dot = '🟢'; cls = 'status-online'; text = 'Online'; }
+  else if (s.lastActionStatus === 'Idle') { dot = '🟡'; cls = 'status-idle'; text = `Idle · ${s.lastActionRelative}`; }
+  else { dot = '⚫'; cls = 'status-offline'; text = `Offline · ${s.lastActionRelative}`; }
+
+  // Flag unreachable states
+  let stateSuffix = '';
+  if (s.state && s.state !== 'Okay') {
+    stateSuffix = ` · <span class="status-unreachable">${escapeHtml(s.state)}</span>`;
+  }
+
+  return `<div class="status-line ${cls}">${dot} ${text}${stateSuffix}</div>`;
 }
 
 // ============ JSONBIN SYNC ============
@@ -523,6 +627,7 @@ function renderTraders() {
         <td>
           <div class="trader-name">${escapeHtml(t.name)}${onShitList ? '<span class="shit-flag">⚠ on shit list</span>' : ''}</div>
           <div class="hint">ID: ${t.tornId}</div>
+          ${renderStatusCell(t.tornId)}
         </td>
         <td>${(t.tags || '').split(',').filter(x => x.trim()).map(x => `<span class="tag-pill">${escapeHtml(x.trim())}</span>`).join('')}</td>
         <td>${escapeHtml(t.buys || '—')}</td>
@@ -894,7 +999,7 @@ updateSyncStatus();
 if (state.yataFetchedAt) {
   document.getElementById('last-refresh').textContent = `YATA data fetched: ${new Date(state.yataFetchedAt).toLocaleString()}`;
 }
-setInterval(() => { updateYataStatus(); updateSyncStatus(); }, 30000);
+setInterval(() => { updateYataStatus(); updateSyncStatus(); updateStatusCheckedLabel(); }, 30000);
 // Auto-sync if configured and on traders tab
 if (state.settings.binId && state.settings.binKey) {
   syncNow();
