@@ -196,13 +196,16 @@
 
 <div id="collections" class="panel">
   <div id="collections-unconfigured" style="display:none" class="data-source-note">
-    <strong>Set up your Torn API key first.</strong> Go to Settings, paste your API key. Inventory is fetched from Torn directly.
+    <strong>Set up your Torn API key first.</strong> Go to Settings, paste your API key. The key is needed to load item names and identify your column.
+  </div>
+
+  <div class="data-source-note">
+    Track your plushie and flower collections by typing how many of each you have. Edits autosave to the shared list. The "Available now" column pulls from YATA — refresh Live Stock first to see where to find missing items.
   </div>
 
   <div class="filter-bar">
-    <button onclick="refreshMyInventory()" id="refresh-inv-btn">Refresh my inventory</button>
-    <button class="secondary" onclick="showRawInventory()">Show raw response</button>
-    <div class="hint" id="inv-status" style="margin-bottom:0">Inventory not loaded yet</div>
+    <button class="secondary" onclick="loadItemNames()" id="refresh-inv-btn">Reload item names</button>
+    <div class="hint" id="inv-status" style="margin-bottom:0">Edits autosave</div>
   </div>
 
   <h2 style="margin-top:24px">Plushies <span style="font-weight:400;font-size:13px;color:#888780" id="plushies-summary"></span></h2>
@@ -394,114 +397,79 @@ async function detectMyIdentity() {
   }
 }
 
-async function refreshMyInventory() {
+// Debounced save for collection edits
+let collectionSaveTimer = null;
+async function queueCollectionSave() {
+  if (collectionSaveTimer) clearTimeout(collectionSaveTimer);
+  collectionSaveTimer = setTimeout(async () => {
+    save();
+    if (state.settings.binId && state.settings.binKey) {
+      await syncPush();
+      const indicator = document.getElementById('inv-status');
+      if (indicator) indicator.textContent = 'Saved · synced just now';
+    }
+  }, 2000);
+}
+
+async function setMyItemCount(itemId, count) {
+  // Make sure we know who we are
+  let me = state.myKey ? { key: state.myKey, name: state.myName } : await detectMyIdentity();
+  if (!me) {
+    toast('Set your Torn API key in Settings first');
+    return;
+  }
+  if (!state.inventory[me.key]) {
+    state.inventory[me.key] = { owner: me.name, items: {}, updatedAt: new Date().toISOString() };
+  }
+  const c = Math.max(0, parseInt(count) || 0);
+  if (c === 0) {
+    delete state.inventory[me.key].items[itemId];
+  } else {
+    state.inventory[me.key].items[itemId] = c;
+  }
+  state.inventory[me.key].updatedAt = new Date().toISOString();
+
+  const indicator = document.getElementById('inv-status');
+  if (indicator) indicator.textContent = 'Editing... (autosaves in 2s)';
+
+  queueCollectionSave();
+
+  // Re-render summary line at top of section without rebuilding inputs (would lose focus)
+  updateCollectionSummaries();
+}
+
+function updateCollectionSummaries() {
+  const ownerKeys = Object.keys(state.inventory);
+  ['plushies-summary', 'flowers-summary'].forEach(sumId => {
+    const summary = document.getElementById(sumId);
+    if (!summary) return;
+    const itemIds = sumId === 'plushies-summary' ? PLUSHIE_IDS : FLOWER_IDS;
+    if (ownerKeys.length === 0) {
+      summary.textContent = '— no entries yet';
+      return;
+    }
+    const parts = ownerKeys.map(k => {
+      const inv = state.inventory[k];
+      const count = itemIds.filter(id => inv.items && inv.items[id] > 0).length;
+      return `${inv.owner}: ${count}/${itemIds.length}`;
+    });
+    summary.textContent = '— ' + parts.join(' · ');
+  });
+}
+
+async function loadItemNames() {
+  // Just ensures torn/items is fetched so we have names
   if (!state.settings.apiKey) {
-    toast('Torn API key required. Set it in Settings.');
+    toast('Set your Torn API key in Settings first');
     return;
   }
   const btn = document.getElementById('refresh-inv-btn');
-  btn.textContent = 'Fetching...';
-  btn.disabled = true;
-
-  try {
-    // Make sure we know who we are
-    const me = await detectMyIdentity();
-    if (!me) throw new Error('Could not detect identity');
-
-    // Fetch inventory
-    const resp = await fetch(`https://api.torn.com/user/?selections=inventory&key=${state.settings.apiKey}`);
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error.error);
-
-    // Convert inventory to {id: qty} map - tolerant to multiple shapes
-    // Possible shapes Torn API has used:
-    //   1. Array of items: [{ID/id, name, quantity, ...}, ...]
-    //   2. Object keyed by something: {"123": {ID/id, name, quantity}, ...}
-    //   3. Wrapped: { inventory: [...] }
-    const items = {};
-    const raw = data.inventory;
-    state._lastRawInventory = data; // stash for debugging
-
-    function ingestItem(it) {
-      if (!it || typeof it !== 'object') return;
-      // Try various ID field names
-      const id = it.ID !== undefined ? it.ID
-              : it.id !== undefined ? it.id
-              : it.item_id !== undefined ? it.item_id
-              : null;
-      if (id === null) return;
-      const qty = it.quantity !== undefined ? it.quantity
-                : it.qty !== undefined ? it.qty
-                : it.amount !== undefined ? it.amount
-                : 1;
-      const idStr = String(id);
-      items[idStr] = (items[idStr] || 0) + (Number(qty) || 0);
-    }
-
-    if (Array.isArray(raw)) {
-      for (const it of raw) ingestItem(it);
-    } else if (raw && typeof raw === 'object') {
-      // It's keyed object — values could be item objects, OR the keys could be the IDs
-      for (const k in raw) {
-        const v = raw[k];
-        if (v && typeof v === 'object') {
-          // If the value has ID/id/quantity, treat it as an item
-          if (v.ID !== undefined || v.id !== undefined || v.item_id !== undefined) {
-            ingestItem(v);
-          } else if (v.quantity !== undefined || v.qty !== undefined) {
-            // Key is the ID, value has quantity but no ID field
-            const idStr = String(k);
-            const qty = v.quantity !== undefined ? v.quantity : v.qty;
-            items[idStr] = (items[idStr] || 0) + (Number(qty) || 0);
-          }
-        } else if (typeof v === 'number') {
-          // Key is ID, value is quantity directly
-          items[String(k)] = (items[String(k)] || 0) + v;
-        }
-      }
-    }
-
-    state.inventory[me.key] = {
-      owner: me.name,
-      items,
-      updatedAt: new Date().toISOString()
-    };
-    save();
-
-    // Also fetch items metadata if not already cached (we need names)
-    if (state.settings.apiKey) await fetchTornItems();
-
-    // Push to JSONBin so PlyBur sees it
-    if (state.settings.binId && state.settings.binKey) {
-      await syncPush();
-    }
-
-    renderCollections();
-    const itemCount = Object.keys(items).length;
-    if (itemCount === 0) {
-      toast('Inventory fetched, but parser found 0 items. Click "Show raw response" to debug.');
-    } else {
-      toast(`Inventory refreshed (${itemCount} unique items)`);
-    }
-  } catch(e) {
-    console.error(e);
-    toast('Inventory fetch failed: ' + e.message);
-  }
-
-  btn.textContent = 'Refresh my inventory';
-  btn.disabled = false;
-}
-
-function showRawInventory() {
-  const container = document.getElementById('plushies-table-container');
-  if (!state._lastRawInventory) {
-    toast('No raw response yet — click Refresh first');
-    return;
-  }
-  const pre = document.createElement('pre');
-  pre.style.cssText = 'background:#2a2a28;color:#fff;padding:12px;border-radius:6px;overflow:auto;max-height:600px;font-size:11px;margin-top:12px';
-  pre.textContent = JSON.stringify(state._lastRawInventory, null, 2).slice(0, 8000) + '\n\n... (truncated if long)';
-  container.appendChild(pre);
+  if (btn) { btn.textContent = 'Loading names...'; btn.disabled = true; }
+  await fetchTornItems();
+  await detectMyIdentity();
+  renderCollections();
+  if (btn) { btn.textContent = 'Reload item names'; btn.disabled = false; }
+  toast('Item names loaded');
 }
 
 function getCountryForItem(itemId) {
@@ -533,13 +501,22 @@ function renderCollectionTable(containerId, summaryId, itemIds, label) {
   if (!container) return;
 
   if (!state.itemsData) {
-    container.innerHTML = `<div class="empty-state">Item names not loaded yet. Click "Refresh my inventory" or refresh Live Stock data.</div>`;
+    container.innerHTML = `<div class="empty-state">Item names not loaded yet. Click "Reload item names" above.</div>`;
     if (summary) summary.textContent = '';
     return;
   }
 
-  // Collect each owner's keys from inventory
-  const ownerKeys = Object.keys(state.inventory);
+  // Make sure I'm in the inventory list (with possibly empty items) so my column always shows
+  const me = state.myKey ? { key: state.myKey, name: state.myName } : null;
+  if (me && !state.inventory[me.key]) {
+    state.inventory[me.key] = { owner: me.name, items: {}, updatedAt: new Date().toISOString() };
+  }
+
+  // Owners — me first if known, then everyone else
+  let ownerKeys = Object.keys(state.inventory);
+  if (me) {
+    ownerKeys = [me.key, ...ownerKeys.filter(k => k !== me.key)];
+  }
   const ownerLabels = ownerKeys.map(k => state.inventory[k].owner || k);
 
   // Build rows
@@ -552,28 +529,18 @@ function renderCollectionTable(containerId, summaryId, itemIds, label) {
     return { id, name, marketValue, ownerCounts, sourceInfo };
   });
 
-  const totalForOwner = (i) => rows.filter(r => r.ownerCounts[i] > 0).length;
-  const totalNeeded = itemIds.length;
-
-  // Summary line
-  if (summary) {
-    if (ownerKeys.length === 0) {
-      summary.textContent = '— no inventory data yet';
-    } else {
-      const summaryParts = ownerKeys.map((k, i) => `${state.inventory[k].owner}: ${totalForOwner(i)}/${totalNeeded}`);
-      summary.textContent = '— ' + summaryParts.join(' · ');
-    }
-  }
-
   if (ownerKeys.length === 0) {
-    container.innerHTML = `<div class="empty-state">No inventory data. Click "Refresh my inventory" above.</div>`;
+    container.innerHTML = `<div class="empty-state">Set your Torn API key in Settings, then come back. The tool needs to know who you are to track your column.</div>`;
     return;
   }
 
   container.innerHTML = `<table>
     <thead><tr>
       <th>Item</th>
-      ${ownerLabels.map(l => `<th class="num">${escapeHtml(l)}</th>`).join('')}
+      ${ownerLabels.map((l, i) => {
+        const isMe = me && ownerKeys[i] === me.key;
+        return `<th class="num">${escapeHtml(l)}${isMe ? ' (you)' : ''}</th>`;
+      }).join('')}
       <th class="num">Market value</th>
       <th>Available now</th>
     </tr></thead>
@@ -585,12 +552,21 @@ function renderCollectionTable(containerId, summaryId, itemIds, label) {
         : '<span style="color:#888780">—</span>';
       return `<tr>
         <td>${escapeHtml(r.name)}</td>
-        ${r.ownerCounts.map(c => `<td class="num">${c > 0 ? `<span class="stock-good">✓ ${c}</span>` : '<span class="stock-empty">✗</span>'}</td>`).join('')}
+        ${r.ownerCounts.map((c, i) => {
+          const isMe = me && ownerKeys[i] === me.key;
+          if (isMe) {
+            return `<td class="num"><input type="number" min="0" value="${c}" style="width:60px;padding:4px 6px;text-align:center" onchange="setMyItemCount('${r.id}', this.value)" /></td>`;
+          } else {
+            return `<td class="num">${c > 0 ? `<span class="stock-good">${c}</span>` : '<span style="color:#888780">—</span>'}</td>`;
+          }
+        }).join('')}
         <td class="num">${r.marketValue ? '$' + fmt(r.marketValue) : '—'}</td>
         <td>${stockHint}</td>
       </tr>`;
     }).join('')}</tbody>
   </table>`;
+
+  updateCollectionSummaries();
 }
 
 function renderCollections() {
@@ -598,24 +574,24 @@ function renderCollections() {
   const unconfigured = document.getElementById('collections-unconfigured');
   if (unconfigured) unconfigured.style.display = state.settings.apiKey ? 'none' : 'block';
 
-  // Update inventory status line
-  const invStatus = document.getElementById('inv-status');
-  if (invStatus) {
-    if (Object.keys(state.inventory).length === 0) {
-      invStatus.textContent = 'Inventory not loaded yet';
-    } else {
-      const parts = Object.keys(state.inventory).map(k => {
-        const inv = state.inventory[k];
-        const ageMin = inv.updatedAt ? Math.round((Date.now() - new Date(inv.updatedAt)) / 60000) : null;
-        const ageText = ageMin === null ? 'unknown' : (ageMin < 1 ? 'just now' : ageMin + 'm ago');
-        return `${inv.owner}: ${ageText}`;
-      });
-      invStatus.textContent = parts.join(' · ');
-    }
+  // Make sure I have an entry so my column always shows after first load
+  if (state.settings.apiKey && !state.myKey) {
+    detectMyIdentity().then(() => {
+      renderCollectionTable('plushies-table-container', 'plushies-summary', PLUSHIE_IDS, 'Plushies');
+      renderCollectionTable('flowers-table-container', 'flowers-summary', FLOWER_IDS, 'Flowers');
+    });
   }
 
   renderCollectionTable('plushies-table-container', 'plushies-summary', PLUSHIE_IDS, 'Plushies');
   renderCollectionTable('flowers-table-container', 'flowers-summary', FLOWER_IDS, 'Flowers');
+
+  // Auto-load item names if missing and we have a key
+  if (state.settings.apiKey && !state.itemsData) {
+    fetchTornItems().then(() => {
+      renderCollectionTable('plushies-table-container', 'plushies-summary', PLUSHIE_IDS, 'Plushies');
+      renderCollectionTable('flowers-table-container', 'flowers-summary', FLOWER_IDS, 'Flowers');
+    });
+  }
 }
 
 async function checkAllStatus() {
