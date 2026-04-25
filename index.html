@@ -90,6 +90,10 @@
   .log-edited { font-size: 11px; color: #888780; font-style: italic; margin-left: 6px; }
   .log-actions { font-size: 12px; margin-top: 8px; }
   .log-actions button { padding: 3px 10px; font-size: 12px; }
+  .freshness { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .freshness.fresh { background: #EAF3DE; color: #27500A; }
+  .freshness.mid   { background: #FAEEDA; color: #633806; }
+  .freshness.stale { background: #FCEBEB; color: #791F1F; }
 </style>
 
 <h1>Torn Travel Tracker</h1>
@@ -382,6 +386,20 @@ function toast(msg) {
 }
 
 function fmt(n) { return new Intl.NumberFormat().format(n); }
+
+// Convert a unix-seconds timestamp into a human-friendly age string + class.
+// Used for the per-country YATA freshness indicator in Live Stock.
+function ageSinceUnix(unixSeconds) {
+  if (!unixSeconds) return { text: '?', cls: 'stale' };
+  const ageSec = Math.floor(Date.now() / 1000) - unixSeconds;
+  let text, cls;
+  if (ageSec < 0)            { text = 'just now';          cls = 'fresh'; }
+  else if (ageSec < 60)      { text = ageSec + 's ago';    cls = 'fresh'; }
+  else if (ageSec < 3600)    { text = Math.round(ageSec / 60) + 'm ago';   cls = ageSec < 600 ? 'fresh' : 'mid'; }
+  else if (ageSec < 86400)   { text = Math.round(ageSec / 3600) + 'h ago'; cls = 'stale'; }
+  else                       { text = Math.round(ageSec / 86400) + 'd ago'; cls = 'stale'; }
+  return { text, cls };
+}
 
 // ============ SORT STATE (per-session) ============
 const sortState = {
@@ -1519,7 +1537,17 @@ function addRow(rows, countryName, itemId, item, countryEntry) {
   const itemInfo = (state.itemsData && state.itemsData[itemId]) || {};
   const itemName = itemInfo.name || item.name || `Item #${itemId}`;
   const marketValue = itemInfo.market_value || item.market_value || 0;
-  rows.push({ country: countryName, itemId: String(itemId), itemName, stock: Number(quantity) || 0, cost: Number(cost) || 0, marketValue: Number(marketValue) || 0 });
+  // YATA gives us a per-country "update" timestamp (unix seconds) — when this country's stock was last reported
+  const updateTs = countryEntry && (countryEntry.update || countryEntry.timestamp);
+  rows.push({
+    country: countryName,
+    itemId: String(itemId),
+    itemName,
+    stock: Number(quantity) || 0,
+    cost: Number(cost) || 0,
+    marketValue: Number(marketValue) || 0,
+    countryUpdateTs: updateTs ? Number(updateTs) : null
+  });
 }
 
 function renderLiveStock() {
@@ -1548,6 +1576,7 @@ function renderLiveStock() {
   const hasMarketData = state.itemsData !== null;
   container.innerHTML = `<table><thead><tr>
     ${thHtml('live', 'country', 'Country', false)}
+    ${thHtml('live', 'countryUpdateTs', 'Data age', false)}
     ${thHtml('live', 'itemName', 'Item', false)}
     ${thHtml('live', 'stock', 'Stock', true)}
     ${thHtml('live', 'cost', 'Buy', true)}
@@ -1565,7 +1594,8 @@ function renderLiveStock() {
     const profitCell = hasMarketData
       ? `<td class="num">$${fmt(r.marketValue)}</td><td class="num">$${fmt(r.profitPerItem)}</td><td class="num">$${fmt(r.totalProfit)}</td><td class="num">$${fmt(r.profitPerHour)}</td>`
       : '<td colspan="4" style="color:#888780">—</td>';
-    return `<tr><td>${r.country}</td><td>${escapeHtml(r.itemName)}</td><td class="num ${stockCls}">${fmt(r.stock)}</td><td class="num">$${fmt(r.cost)}</td>${profitCell}</tr>`;
+    const age = ageSinceUnix(r.countryUpdateTs);
+    return `<tr><td>${r.country}</td><td><span class="freshness ${age.cls}">${age.text}</span></td><td>${escapeHtml(r.itemName)}</td><td class="num ${stockCls}">${fmt(r.stock)}</td><td class="num">$${fmt(r.cost)}</td>${profitCell}</tr>`;
   }).join('')}</tbody></table>`;
 }
 
