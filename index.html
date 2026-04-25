@@ -93,7 +93,7 @@
 </style>
 
 <h1>Torn Travel Tracker</h1>
-<p class="subtitle">Live stock · trader directory · shit list · settings</p>
+<p class="subtitle">Live stock · traders · collections · logbook · settings</p>
 <div class="status-bar">
   <span id="yata-status" class="status-chip warn">YATA: not loaded</span>
   <span id="torn-status" class="status-chip warn">Torn API: no key</span>
@@ -141,11 +141,12 @@
   <p class="hint" id="status-checked-at" style="margin-top:-8px;margin-bottom:12px">Status not checked yet</p>
 
   <div class="add-form" id="trader-form">
+    <h3 id="trader-form-title" style="margin-top:0">Add trader</h3>
     <div class="form-row">
       <div style="grid-column: span 2">
         <label>Torn profile URL</label>
         <input type="text" id="trader-url" placeholder="https://www.torn.com/profiles.php?XID=1234567" />
-        <div class="hint">Paste the full Torn profile URL. I'll look up the username via Torn API.</div>
+        <div class="hint" id="trader-url-hint">Paste the full Torn profile URL. I'll look up the username via Torn API.</div>
       </div>
     </div>
     <div class="form-row">
@@ -155,8 +156,8 @@
     <div class="form-row">
       <div style="grid-column: 1 / -1"><label>Note</label><textarea id="trader-note" placeholder="Anything worth remembering"></textarea></div>
     </div>
-    <button onclick="addTrader()" id="add-trader-btn">Save trader</button>
-    <button class="secondary" onclick="toggleTraderForm()">Cancel</button>
+    <button onclick="saveTraderForm()" id="add-trader-btn">Save trader</button>
+    <button class="secondary" onclick="cancelTraderForm()">Cancel</button>
   </div>
 
   <div id="traders-table-container"></div>
@@ -168,6 +169,7 @@
   </div>
 
   <div class="add-form" id="shit-form">
+    <h3 id="shit-form-title" style="margin-top:0">Add to shit list</h3>
     <div class="form-row">
       <div style="grid-column: span 2">
         <label>Torn profile URL</label>
@@ -187,8 +189,8 @@
     <div class="form-row">
       <div style="grid-column: 1 / -1"><label>What happened</label><textarea id="shit-what" placeholder="Mugged me after accepting trade, ghosted mid-deal, etc."></textarea></div>
     </div>
-    <button onclick="addShit()" id="add-shit-btn">Save entry</button>
-    <button class="secondary" onclick="toggleShitForm()">Cancel</button>
+    <button onclick="saveShitForm()" id="add-shit-btn">Save entry</button>
+    <button class="secondary" onclick="cancelShitForm()">Cancel</button>
   </div>
 
   <div id="shit-table-container"></div>
@@ -279,7 +281,7 @@
   <button onclick="saveSettings()">Save settings</button>
 
   <h3 style="margin-top:28px">About</h3>
-  <p class="section-desc">Stock data crowd-sourced from YATA. Traders/shit list stored in JSONBin (shared with PlyBur). Torn API is used for username lookups and to calculate profit in the Live Stock tab. Nothing logged on any server except the shared list contents on JSONBin, which only you and PlyBur can access with the Master Key.</p>
+  <p class="section-desc">A small private dashboard for foreign-shop merching. Stock data is crowd-sourced from YATA. Traders, shit list, inventory, and logbook entries are stored in a shared JSONBin so two people can share the same view. The Torn API is used for usernames, market prices, online status, and location stamps. Nothing is logged to any server beyond the shared list contents on JSONBin, which only people with the Master Key can read.</p>
 </div>
 
 <div id="toast" class="toast"></div>
@@ -356,7 +358,10 @@ let state = {
   statusCheckedAt: null,
   // My identity (auto-detected from API key)
   myKey: null,
-  myName: null
+  myName: null,
+  // Edit state (per-session)
+  editingTraderId: null,
+  editingShitId: null
 };
 
 function load() {
@@ -698,7 +703,7 @@ function formatLocation(loc) {
   else if (loc.state === 'Hospital') icon = '🏥';
   else if (loc.state === 'Jail') icon = '🔒';
   else if (loc.state === 'Federal') icon = '⛓️';
-  else if (loc.state === 'Okay') icon = '🇹';
+  else if (loc.state === 'Okay') icon = '🌆';
   return `${icon} ${desc}`;
 }
 
@@ -1035,13 +1040,64 @@ function clearJsonbin() {
 // ============ TRADERS ============
 function toggleTraderForm() {
   const f = document.getElementById('trader-form');
-  f.classList.toggle('open');
   if (f.classList.contains('open')) {
+    cancelTraderForm();
+  } else {
+    state.editingTraderId = null;
+    document.getElementById('trader-form-title').textContent = 'Add trader';
+    document.getElementById('trader-url').readOnly = false;
+    document.getElementById('trader-url-hint').style.display = '';
+    document.getElementById('add-trader-btn').textContent = 'Save trader';
+    ['trader-url','trader-tags','trader-buys','trader-note'].forEach(id => document.getElementById(id).value = '');
+    f.classList.add('open');
     document.getElementById('trader-url').focus();
   }
 }
 
-async function addTrader() {
+function startEditTrader(id) {
+  const t = state.traders.find(x => x.id === id);
+  if (!t) return;
+  state.editingTraderId = id;
+  const f = document.getElementById('trader-form');
+  document.getElementById('trader-form-title').textContent = `Edit ${t.name}`;
+  document.getElementById('trader-url').value = `https://www.torn.com/profiles.php?XID=${t.tornId}`;
+  document.getElementById('trader-url').readOnly = true;
+  document.getElementById('trader-url-hint').style.display = 'none';
+  document.getElementById('trader-tags').value = t.tags || '';
+  document.getElementById('trader-buys').value = t.buys || '';
+  document.getElementById('trader-note').value = t.note || '';
+  document.getElementById('add-trader-btn').textContent = 'Save changes';
+  f.classList.add('open');
+  f.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('trader-tags').focus();
+}
+
+function cancelTraderForm() {
+  state.editingTraderId = null;
+  const f = document.getElementById('trader-form');
+  f.classList.remove('open');
+  ['trader-url','trader-tags','trader-buys','trader-note'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('trader-url').readOnly = false;
+  document.getElementById('trader-url-hint').style.display = '';
+}
+
+async function saveTraderForm() {
+  // Edit mode: just update fields, no API call
+  if (state.editingTraderId) {
+    const t = state.traders.find(x => x.id === state.editingTraderId);
+    if (!t) { toast('Trader not found'); cancelTraderForm(); return; }
+    t.tags = document.getElementById('trader-tags').value.trim();
+    t.buys = document.getElementById('trader-buys').value.trim();
+    t.note = document.getElementById('trader-note').value.trim();
+    save();
+    if (state.settings.binId && state.settings.binKey) await syncPush();
+    cancelTraderForm();
+    renderTradersTab();
+    toast('Updated');
+    return;
+  }
+
+  // Add mode: existing flow
   const url = document.getElementById('trader-url').value.trim();
   const tags = document.getElementById('trader-tags').value.trim();
   const buys = document.getElementById('trader-buys').value.trim();
@@ -1050,7 +1106,6 @@ async function addTrader() {
   const tornId = parseTornUrl(url);
   if (!tornId) { toast("Couldn't find an ID in that URL"); return; }
 
-  // Check against shit list
   const onShitList = state.shitlist.find(s => s.tornId === tornId);
   if (onShitList) {
     const confirmed = confirm(`⚠ This person is on the shit list:\n\n"${onShitList.what}"\n(${onShitList.source}, ${onShitList.date})\n\nAdd to Our Traders anyway?`);
@@ -1063,7 +1118,6 @@ async function addTrader() {
 
   try {
     const userInfo = await lookupTornUser(tornId);
-    // Check for dup
     const exists = state.traders.find(t => t.tornId === tornId);
     if (exists) {
       toast(`${userInfo.name} is already in Our Traders`);
@@ -1080,8 +1134,7 @@ async function addTrader() {
     });
     save();
     await syncPush();
-    ['trader-url','trader-tags','trader-buys','trader-note'].forEach(id => document.getElementById(id).value = '');
-    toggleTraderForm();
+    cancelTraderForm();
     renderTradersTab();
     toast(`Added ${userInfo.name}`);
   } catch(e) {
@@ -1132,7 +1185,7 @@ function renderTraders() {
           <a href="https://www.tornexchange.com/prices/${encodeURIComponent(t.name)}/" target="_blank" rel="noopener">TE prices ↗</a>
           <a href="https://www.torn.com/profiles.php?XID=${t.tornId}" target="_blank" rel="noopener">Torn profile ↗</a>
         </td>
-        <td><button class="danger" onclick="deleteTrader(${t.id})">Delete</button></td>
+        <td><button class="secondary small" onclick="startEditTrader(${t.id})" style="padding:3px 10px;font-size:12px;margin-right:4px">Edit</button><button class="danger" onclick="deleteTrader(${t.id})">Delete</button></td>
       </tr>`;
     }).join('')}</tbody>
   </table>`;
@@ -1141,16 +1194,67 @@ function renderTraders() {
 // ============ SHIT LIST ============
 function toggleShitForm() {
   const f = document.getElementById('shit-form');
-  f.classList.toggle('open');
   if (f.classList.contains('open')) {
-    document.getElementById('shit-url').focus();
+    cancelShitForm();
+  } else {
+    state.editingShitId = null;
+    document.getElementById('shit-form-title').textContent = 'Add to shit list';
+    document.getElementById('shit-url').readOnly = false;
+    document.getElementById('add-shit-btn').textContent = 'Save entry';
+    ['shit-url','shit-what'].forEach(id => document.getElementById(id).value = '');
     if (!document.getElementById('shit-date').value) {
       document.getElementById('shit-date').value = new Date().toISOString().slice(0,10);
     }
+    document.getElementById('shit-source').value = 'me';
+    f.classList.add('open');
+    document.getElementById('shit-url').focus();
   }
 }
 
-async function addShit() {
+function startEditShit(id) {
+  const s = state.shitlist.find(x => x.id === id);
+  if (!s) return;
+  state.editingShitId = id;
+  const f = document.getElementById('shit-form');
+  document.getElementById('shit-form-title').textContent = `Edit entry for ${s.name}`;
+  document.getElementById('shit-url').value = `https://www.torn.com/profiles.php?XID=${s.tornId}`;
+  document.getElementById('shit-url').readOnly = true;
+  document.getElementById('shit-date').value = s.date || '';
+  document.getElementById('shit-source').value = s.source || 'me';
+  document.getElementById('shit-what').value = s.what || '';
+  document.getElementById('add-shit-btn').textContent = 'Save changes';
+  f.classList.add('open');
+  f.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('shit-what').focus();
+}
+
+function cancelShitForm() {
+  state.editingShitId = null;
+  const f = document.getElementById('shit-form');
+  f.classList.remove('open');
+  ['shit-url','shit-what'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('shit-url').readOnly = false;
+}
+
+async function saveShitForm() {
+  // Edit mode: just update fields
+  if (state.editingShitId) {
+    const s = state.shitlist.find(x => x.id === state.editingShitId);
+    if (!s) { toast('Entry not found'); cancelShitForm(); return; }
+    s.what = document.getElementById('shit-what').value.trim();
+    s.date = document.getElementById('shit-date').value;
+    s.source = document.getElementById('shit-source').value;
+    if (!s.what) { toast('Describe what happened'); return; }
+    if (!s.date) { toast('Pick a date'); return; }
+    save();
+    if (state.settings.binId && state.settings.binKey) await syncPush();
+    cancelShitForm();
+    renderTradersTab();
+    toast('Updated');
+    return;
+  }
+
+  // Add mode
   const url = document.getElementById('shit-url').value.trim();
   const date = document.getElementById('shit-date').value;
   const source = document.getElementById('shit-source').value;
@@ -1184,8 +1288,7 @@ async function addShit() {
     });
     save();
     await syncPush();
-    ['shit-url','shit-what'].forEach(id => document.getElementById(id).value = '');
-    toggleShitForm();
+    cancelShitForm();
     renderTradersTab();
     toast(`Added ${userInfo.name} to shit list`);
   } catch(e) {
@@ -1228,7 +1331,7 @@ function renderShitList() {
         <td class="num">${s.date}</td>
         <td><span class="source-pill ${sourceCls}">${sourceLabel}</span></td>
         <td class="action-links"><a href="https://www.torn.com/profiles.php?XID=${s.tornId}" target="_blank" rel="noopener">Torn profile ↗</a></td>
-        <td><button class="danger" onclick="deleteShit(${s.id})">Delete</button></td>
+        <td><button class="secondary small" onclick="startEditShit(${s.id})" style="padding:3px 10px;font-size:12px;margin-right:4px">Edit</button><button class="danger" onclick="deleteShit(${s.id})">Delete</button></td>
       </tr>`;
     }).join('')}</tbody>
   </table>`;
