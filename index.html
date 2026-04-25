@@ -86,6 +86,7 @@
 <div class="tabs">
   <button class="tab active" data-tab="live">Live stock</button>
   <button class="tab" data-tab="traders">Traders</button>
+  <button class="tab" data-tab="collections">Collections</button>
   <button class="tab" data-tab="settings">Settings</button>
 </div>
 
@@ -193,6 +194,23 @@
   <div id="te-top-container"></div>
 </div>
 
+<div id="collections" class="panel">
+  <div id="collections-unconfigured" style="display:none" class="data-source-note">
+    <strong>Set up your Torn API key first.</strong> Go to Settings, paste your API key. Inventory is fetched from Torn directly.
+  </div>
+
+  <div class="filter-bar">
+    <button onclick="refreshMyInventory()" id="refresh-inv-btn">Refresh my inventory</button>
+    <div class="hint" id="inv-status" style="margin-bottom:0">Inventory not loaded yet</div>
+  </div>
+
+  <h2 style="margin-top:24px">Plushies <span style="font-weight:400;font-size:13px;color:#888780" id="plushies-summary"></span></h2>
+  <div id="plushies-table-container"></div>
+
+  <h2 style="margin-top:32px">Flowers <span style="font-weight:400;font-size:13px;color:#888780" id="flowers-summary"></span></h2>
+  <div id="flowers-table-container"></div>
+</div>
+
 <div id="settings" class="panel">
   <h3>Torn API</h3>
   <div class="api-setup">
@@ -284,6 +302,13 @@ const TE_TOP_30 = [
 ];
 
 const YATA_CACHE_MINUTES = 5;
+const INVENTORY_CACHE_MINUTES = 5;
+
+// Plushie set: 13 items required for the museum
+const PLUSHIE_IDS = ['186', '215', '187', '261', '618', '258', '273', '269', '266', '268', '281', '274', '384'];
+
+// Exotic flower set: 11 items required for the museum
+const FLOWER_IDS = ['260', '617', '263', '272', '264', '271', '267', '277', '282', '276', '385'];
 
 let state = {
   settings: { tzOffset: -7, travelMethod: 0.7, apiKey: '', binId: '', binKey: '' },
@@ -292,10 +317,14 @@ let state = {
   // Shared data:
   traders: [],
   shitlist: [],
+  inventory: {}, // { hunka: { items: {id: qty}, owner: 'Hunka', updatedAt: '...' }, plybur: {...} }
   lastSynced: null,
   // Per-session status (not persisted):
   statusByTornId: {},
-  statusCheckedAt: null
+  statusCheckedAt: null,
+  // My identity (auto-detected from API key)
+  myKey: null,
+  myName: null
 };
 
 function load() {
@@ -346,6 +375,189 @@ async function fetchTornStatus(tornId) {
     state: data.status && data.status.state,
     stateDescription: data.status && data.status.description
   };
+}
+
+async function detectMyIdentity() {
+  if (!state.settings.apiKey) return null;
+  if (state.myKey && state.myName) return { key: state.myKey, name: state.myName };
+  try {
+    const resp = await fetch(`https://api.torn.com/user/?selections=basic&key=${state.settings.apiKey}`);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.error);
+    state.myName = data.name;
+    state.myKey = data.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return { key: state.myKey, name: state.myName };
+  } catch(e) {
+    console.error('Identity detection failed:', e);
+    return null;
+  }
+}
+
+async function refreshMyInventory() {
+  if (!state.settings.apiKey) {
+    toast('Torn API key required. Set it in Settings.');
+    return;
+  }
+  const btn = document.getElementById('refresh-inv-btn');
+  btn.textContent = 'Fetching...';
+  btn.disabled = true;
+
+  try {
+    // Make sure we know who we are
+    const me = await detectMyIdentity();
+    if (!me) throw new Error('Could not detect identity');
+
+    // Fetch inventory
+    const resp = await fetch(`https://api.torn.com/user/?selections=inventory&key=${state.settings.apiKey}`);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.error);
+
+    // Convert inventory array to {id: qty} map
+    const items = {};
+    if (Array.isArray(data.inventory)) {
+      for (const it of data.inventory) {
+        items[String(it.ID)] = (items[String(it.ID)] || 0) + (it.quantity || 0);
+      }
+    }
+
+    state.inventory[me.key] = {
+      owner: me.name,
+      items,
+      updatedAt: new Date().toISOString()
+    };
+    save();
+
+    // Also fetch items metadata if not already cached (we need names)
+    if (state.settings.apiKey) await fetchTornItems();
+
+    // Push to JSONBin so PlyBur sees it
+    if (state.settings.binId && state.settings.binKey) {
+      await syncPush();
+    }
+
+    renderCollections();
+    toast(`Inventory refreshed (${Object.keys(items).length} unique items)`);
+  } catch(e) {
+    console.error(e);
+    toast('Inventory fetch failed: ' + e.message);
+  }
+
+  btn.textContent = 'Refresh my inventory';
+  btn.disabled = false;
+}
+
+function getCountryForItem(itemId) {
+  // Try to find this item in YATA stock data to determine which country sells it
+  if (!state.yataData) return null;
+  let stocksRoot = state.yataData.stocks || state.yataData;
+  for (const countryKey in stocksRoot) {
+    const entry = stocksRoot[countryKey];
+    if (!entry || typeof entry !== 'object') continue;
+    const dest = findDestination(countryKey);
+    if (!dest) continue;
+    let itemSource = entry.stocks || entry.items || entry;
+    if (!itemSource || typeof itemSource !== 'object') continue;
+    if (Array.isArray(itemSource)) {
+      for (const it of itemSource) {
+        if (String(it.id) === String(itemId)) return { country: dest.name, stock: it.quantity || 0, cost: it.cost || 0 };
+      }
+    } else if (itemSource[itemId]) {
+      const it = itemSource[itemId];
+      return { country: dest.name, stock: it.quantity !== undefined ? it.quantity : (it.stock || 0), cost: it.cost || 0 };
+    }
+  }
+  return null;
+}
+
+function renderCollectionTable(containerId, summaryId, itemIds, label) {
+  const container = document.getElementById(containerId);
+  const summary = document.getElementById(summaryId);
+  if (!container) return;
+
+  if (!state.itemsData) {
+    container.innerHTML = `<div class="empty-state">Item names not loaded yet. Click "Refresh my inventory" or refresh Live Stock data.</div>`;
+    if (summary) summary.textContent = '';
+    return;
+  }
+
+  // Collect each owner's keys from inventory
+  const ownerKeys = Object.keys(state.inventory);
+  const ownerLabels = ownerKeys.map(k => state.inventory[k].owner || k);
+
+  // Build rows
+  const rows = itemIds.map(id => {
+    const itemInfo = state.itemsData[id] || {};
+    const name = itemInfo.name || `Item #${id}`;
+    const marketValue = itemInfo.market_value || 0;
+    const ownerCounts = ownerKeys.map(k => (state.inventory[k].items && state.inventory[k].items[id]) || 0);
+    const sourceInfo = getCountryForItem(id);
+    return { id, name, marketValue, ownerCounts, sourceInfo };
+  });
+
+  const totalForOwner = (i) => rows.filter(r => r.ownerCounts[i] > 0).length;
+  const totalNeeded = itemIds.length;
+
+  // Summary line
+  if (summary) {
+    if (ownerKeys.length === 0) {
+      summary.textContent = '— no inventory data yet';
+    } else {
+      const summaryParts = ownerKeys.map((k, i) => `${state.inventory[k].owner}: ${totalForOwner(i)}/${totalNeeded}`);
+      summary.textContent = '— ' + summaryParts.join(' · ');
+    }
+  }
+
+  if (ownerKeys.length === 0) {
+    container.innerHTML = `<div class="empty-state">No inventory data. Click "Refresh my inventory" above.</div>`;
+    return;
+  }
+
+  container.innerHTML = `<table>
+    <thead><tr>
+      <th>Item</th>
+      ${ownerLabels.map(l => `<th class="num">${escapeHtml(l)}</th>`).join('')}
+      <th class="num">Market value</th>
+      <th>Available now</th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const stockHint = r.sourceInfo
+        ? (r.sourceInfo.stock > 0
+          ? `<span class="stock-good">${fmt(r.sourceInfo.stock)} in ${r.sourceInfo.country} @ $${fmt(r.sourceInfo.cost)}</span>`
+          : `<span class="stock-empty">Out in ${r.sourceInfo.country}</span>`)
+        : '<span style="color:#888780">—</span>';
+      return `<tr>
+        <td>${escapeHtml(r.name)}</td>
+        ${r.ownerCounts.map(c => `<td class="num">${c > 0 ? `<span class="stock-good">✓ ${c}</span>` : '<span class="stock-empty">✗</span>'}</td>`).join('')}
+        <td class="num">${r.marketValue ? '$' + fmt(r.marketValue) : '—'}</td>
+        <td>${stockHint}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function renderCollections() {
+  // Show/hide unconfigured banner
+  const unconfigured = document.getElementById('collections-unconfigured');
+  if (unconfigured) unconfigured.style.display = state.settings.apiKey ? 'none' : 'block';
+
+  // Update inventory status line
+  const invStatus = document.getElementById('inv-status');
+  if (invStatus) {
+    if (Object.keys(state.inventory).length === 0) {
+      invStatus.textContent = 'Inventory not loaded yet';
+    } else {
+      const parts = Object.keys(state.inventory).map(k => {
+        const inv = state.inventory[k];
+        const ageMin = inv.updatedAt ? Math.round((Date.now() - new Date(inv.updatedAt)) / 60000) : null;
+        const ageText = ageMin === null ? 'unknown' : (ageMin < 1 ? 'just now' : ageMin + 'm ago');
+        return `${inv.owner}: ${ageText}`;
+      });
+      invStatus.textContent = parts.join(' · ');
+    }
+  }
+
+  renderCollectionTable('plushies-table-container', 'plushies-summary', PLUSHIE_IDS, 'Plushies');
+  renderCollectionTable('flowers-table-container', 'flowers-summary', FLOWER_IDS, 'Flowers');
 }
 
 async function checkAllStatus() {
@@ -446,7 +658,11 @@ async function jsonbinWrite() {
       'Content-Type': 'application/json',
       'X-Master-Key': state.settings.binKey
     },
-    body: JSON.stringify({ traders: state.traders, shitlist: state.shitlist })
+    body: JSON.stringify({
+      traders: state.traders,
+      shitlist: state.shitlist,
+      inventory: state.inventory
+    })
   });
   if (!resp.ok) throw new Error(`JSONBin write failed: ${resp.status}`);
   return true;
@@ -460,10 +676,12 @@ async function syncNow() {
     if (record) {
       state.traders = record.traders || [];
       state.shitlist = record.shitlist || [];
+      state.inventory = record.inventory || {};
       state.lastSynced = new Date().toISOString();
       save();
       updateSyncStatus();
       renderTradersTab();
+      renderCollections();
       toast('Synced');
     }
   } catch(e) {
@@ -519,10 +737,12 @@ async function saveJsonbin() {
     if (record) {
       state.traders = record.traders || [];
       state.shitlist = record.shitlist || [];
+      state.inventory = record.inventory || {};
       state.lastSynced = new Date().toISOString();
       save();
       updateSyncStatus();
       renderTradersTab();
+      renderCollections();
       toast('Connected. Loaded ' + state.traders.length + ' traders, ' + state.shitlist.length + ' shit list.');
     }
   } catch(e) {
