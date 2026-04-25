@@ -32,6 +32,11 @@
   button.danger:hover { background: #FCEBEB; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { text-align: left; padding: 8px; background: #f5f5f0; border-bottom: 1px solid #d3d1c7; font-weight: 500; color: #5f5e5a; white-space: nowrap; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { background: #eeece5; }
+  th.sortable::after { content: ' ⇅'; opacity: 0.3; font-size: 11px; }
+  th.sort-asc::after { content: ' ↑'; opacity: 1; font-size: 11px; }
+  th.sort-desc::after { content: ' ↓'; opacity: 1; font-size: 11px; }
   td { padding: 8px; border-bottom: 1px solid #e8e7e0; vertical-align: top; }
   tr:hover td { background: #faf9f5; }
   td a { color: #534AB7; text-decoration: none; font-weight: 500; }
@@ -73,6 +78,18 @@
   .status-unreachable { color: #791F1F; font-weight: 500; }
   .status-line { font-size: 12px; margin-top: 2px; }
   .status-loading { color: #888780; font-size: 12px; font-style: italic; }
+  .log-entry { background: #faf9f5; padding: 14px 16px; border-radius: 8px; border: 1px solid #e8e7e0; margin-bottom: 12px; }
+  .log-entry.mine { border-left: 3px solid #534AB7; }
+  .log-entry.theirs { border-left: 3px solid #D85A30; }
+  .log-meta { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; flex-wrap: wrap; gap: 8px; }
+  .log-author { font-weight: 500; font-size: 14px; }
+  .log-when { font-size: 12px; color: #888780; }
+  .log-location { font-size: 12px; color: #5f5e5a; margin-bottom: 6px; }
+  .log-text { white-space: pre-wrap; line-height: 1.5; font-size: 14px; }
+  .log-edit-area textarea { width: 100%; }
+  .log-edited { font-size: 11px; color: #888780; font-style: italic; margin-left: 6px; }
+  .log-actions { font-size: 12px; margin-top: 8px; }
+  .log-actions button { padding: 3px 10px; font-size: 12px; }
 </style>
 
 <h1>Torn Travel Tracker</h1>
@@ -87,6 +104,7 @@
   <button class="tab active" data-tab="live">Live stock</button>
   <button class="tab" data-tab="traders">Traders</button>
   <button class="tab" data-tab="collections">Collections</button>
+  <button class="tab" data-tab="logbook">Logbook</button>
   <button class="tab" data-tab="settings">Settings</button>
 </div>
 
@@ -96,14 +114,6 @@
   </div>
   <div class="filter-bar">
     <button onclick="refreshAll()" id="refresh-btn">Refresh data</button>
-    <div><label>Sort by</label>
-      <select id="live-sort" onchange="renderLiveStock()">
-        <option value="profit">Profit/hour</option>
-        <option value="stock">Stock level</option>
-        <option value="total">Total profit</option>
-        <option value="country">Country</option>
-      </select>
-    </div>
     <div><label>Min stock</label><input type="number" id="live-min-stock" value="0" style="width:90px" onchange="renderLiveStock()" /></div>
     <div><label>Capacity</label><input type="number" id="live-capacity" value="19" style="width:80px" onchange="renderLiveStock()" /></div>
     <div><label>Country</label>
@@ -215,6 +225,23 @@
   <div id="flowers-table-container"></div>
 </div>
 
+<div id="logbook" class="panel">
+  <div id="logbook-unconfigured" style="display:none" class="data-source-note">
+    <strong>Set your Torn API key first.</strong> The logbook needs to know who you are to stamp entries with your name.
+  </div>
+
+  <div class="add-form open" id="logbook-form" style="margin-top:0">
+    <label>New entry</label>
+    <textarea id="logbook-text" placeholder="What's happening? Where are you? What's worth remembering?" style="min-height:80px"></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+      <button onclick="saveLogEntry()" id="save-log-btn">Save entry</button>
+      <span class="hint" id="log-location-preview" style="margin-top:0">Location will be stamped at save time</span>
+    </div>
+  </div>
+
+  <div id="logbook-entries"></div>
+</div>
+
 <div id="settings" class="panel">
   <h3>Torn API</h3>
   <div class="api-setup">
@@ -322,6 +349,7 @@ let state = {
   traders: [],
   shitlist: [],
   inventory: {}, // { hunka: { items: {id: qty}, owner: 'Hunka', updatedAt: '...' }, plybur: {...} }
+  logbook: [],
   lastSynced: null,
   // Per-session status (not persisted):
   statusByTornId: {},
@@ -349,6 +377,52 @@ function toast(msg) {
 }
 
 function fmt(n) { return new Intl.NumberFormat().format(n); }
+
+// ============ SORT STATE (per-session) ============
+const sortState = {
+  live: { col: 'profitPerHour', dir: 'desc' },
+  traders: { col: 'name', dir: 'asc' },
+  shitlist: { col: 'date', dir: 'desc' },
+  te: { col: 'rank', dir: 'asc' },
+  plushies: { col: 'name', dir: 'asc' },
+  flowers: { col: 'name', dir: 'asc' }
+};
+
+function toggleSort(table, col) {
+  const s = sortState[table];
+  if (s.col === col) {
+    s.dir = s.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    s.col = col;
+    // Default direction by data type
+    s.dir = (col === 'name' || col === 'item' || col === 'country' || col === 'what' || col === 'tags' || col === 'buys' || col === 'note' || col === 'source') ? 'asc' : 'desc';
+  }
+  // Re-render the affected table
+  if (table === 'live') renderLiveStock();
+  else if (table === 'traders') renderTraders();
+  else if (table === 'shitlist') renderShitList();
+  else if (table === 'te') renderTeTop();
+  else if (table === 'plushies') renderCollectionTable('plushies-table-container', 'plushies-summary', PLUSHIE_IDS, 'Plushies');
+  else if (table === 'flowers') renderCollectionTable('flowers-table-container', 'flowers-summary', FLOWER_IDS, 'Flowers');
+}
+
+function compareValues(a, b, dir) {
+  // null/undefined sort to bottom regardless of direction
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  let result;
+  if (typeof a === 'number' && typeof b === 'number') result = a - b;
+  else result = String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+  return dir === 'asc' ? result : -result;
+}
+
+function thHtml(table, col, label, isNum) {
+  const s = sortState[table];
+  let cls = 'sortable';
+  if (s.col === col) cls += s.dir === 'asc' ? ' sort-asc' : ' sort-desc';
+  return `<th class="${cls}${isNum ? ' num' : ''}" onclick="toggleSort('${table}', '${col}')">${label}</th>`;
+}
 
 // ============ TORN API HELPERS ============
 function parseTornUrl(url) {
@@ -594,6 +668,164 @@ function renderCollections() {
   }
 }
 
+// ============ LOGBOOK ============
+
+async function fetchMyLocation() {
+  if (!state.settings.apiKey) return null;
+  try {
+    const resp = await fetch(`https://api.torn.com/user/?selections=basic&key=${state.settings.apiKey}`);
+    const data = await resp.json();
+    if (data.error) return null;
+    const s = data.status || {};
+    return {
+      state: s.state || null,
+      description: s.description || null,
+      until: s.until || null
+    };
+  } catch(e) {
+    return null;
+  }
+}
+
+function formatLocation(loc) {
+  if (!loc || !loc.state) return '(unknown)';
+  // Examples: state="Okay", state="Traveling", state="Abroad", state="Hospital", state="Jail"
+  // description often like "In Mexico" or "Returning to Torn from Mexico" or "Traveling to Mexico" or "In hospital for X mins"
+  const desc = loc.description || loc.state;
+  let icon = '📍';
+  if (loc.state === 'Traveling') icon = '✈️';
+  else if (loc.state === 'Abroad') icon = '🌍';
+  else if (loc.state === 'Hospital') icon = '🏥';
+  else if (loc.state === 'Jail') icon = '🔒';
+  else if (loc.state === 'Federal') icon = '⛓️';
+  else if (loc.state === 'Okay') icon = '🇹';
+  return `${icon} ${desc}`;
+}
+
+async function saveLogEntry() {
+  const text = document.getElementById('logbook-text').value.trim();
+  if (!text) { toast('Write something first'); return; }
+
+  const btn = document.getElementById('save-log-btn');
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+
+  try {
+    let me = state.myKey ? { key: state.myKey, name: state.myName } : await detectMyIdentity();
+    if (!me) {
+      // Allow saving without identity but mark as anonymous
+      me = { key: 'unknown', name: 'Unknown' };
+    }
+    const loc = state.settings.apiKey ? await fetchMyLocation() : null;
+
+    state.logbook.push({
+      id: Date.now(),
+      authorKey: me.key,
+      authorName: me.name,
+      text,
+      location: loc,
+      timestamp: new Date().toISOString(),
+      editedAt: null
+    });
+    save();
+    if (state.settings.binId && state.settings.binKey) await syncPush();
+
+    document.getElementById('logbook-text').value = '';
+    renderLogbook();
+    toast('Entry saved');
+  } catch(e) {
+    console.error(e);
+    toast('Save failed: ' + e.message);
+  }
+  btn.textContent = 'Save entry';
+  btn.disabled = false;
+}
+
+async function deleteLogEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  state.logbook = state.logbook.filter(e => e.id !== id);
+  save();
+  if (state.settings.binId && state.settings.binKey) await syncPush();
+  renderLogbook();
+  toast('Removed');
+}
+
+function startEditLog(id) {
+  const entry = state.logbook.find(e => e.id === id);
+  if (!entry) return;
+  // Switch this entry's DOM into edit mode
+  const el = document.getElementById('log-entry-' + id);
+  if (!el) return;
+  el.querySelector('.log-text').style.display = 'none';
+  el.querySelector('.log-actions').style.display = 'none';
+
+  const editArea = document.createElement('div');
+  editArea.className = 'log-edit-area';
+  editArea.innerHTML = `
+    <textarea id="log-edit-${id}">${escapeHtml(entry.text)}</textarea>
+    <div style="margin-top:8px;display:flex;gap:8px">
+      <button onclick="commitEditLog(${id})">Save</button>
+      <button class="secondary" onclick="cancelEditLog(${id})">Cancel</button>
+    </div>
+  `;
+  el.appendChild(editArea);
+  document.getElementById('log-edit-' + id).focus();
+}
+
+async function commitEditLog(id) {
+  const entry = state.logbook.find(e => e.id === id);
+  if (!entry) return;
+  const newText = document.getElementById('log-edit-' + id).value.trim();
+  if (!newText) { toast('Entry cannot be empty'); return; }
+  entry.text = newText;
+  entry.editedAt = new Date().toISOString();
+  save();
+  if (state.settings.binId && state.settings.binKey) await syncPush();
+  renderLogbook();
+  toast('Updated');
+}
+
+function cancelEditLog(id) {
+  renderLogbook();
+}
+
+function renderLogbook() {
+  const unconfigured = document.getElementById('logbook-unconfigured');
+  if (unconfigured) unconfigured.style.display = state.settings.apiKey ? 'none' : 'block';
+
+  const container = document.getElementById('logbook-entries');
+  if (!container) return;
+  if (state.logbook.length === 0) {
+    container.innerHTML = '<div class="empty-state">No entries yet. Write the first one above.</div>';
+    return;
+  }
+  // Sort newest first
+  const entries = [...state.logbook].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const myKey = state.myKey;
+
+  container.innerHTML = entries.map(e => {
+    const isMine = e.authorKey === myKey;
+    const cls = isMine ? 'mine' : 'theirs';
+    const when = new Date(e.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const editedNote = e.editedAt
+      ? `<span class="log-edited">edited ${new Date(e.editedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>`
+      : '';
+    const locText = formatLocation(e.location);
+    return `<div class="log-entry ${cls}" id="log-entry-${e.id}">
+      <div class="log-meta">
+        <span class="log-author">${escapeHtml(e.authorName)}${isMine ? ' (you)' : ''}</span>
+        <span class="log-when">${when}${editedNote}</span>
+      </div>
+      <div class="log-location">${locText}</div>
+      <div class="log-text">${escapeHtml(e.text)}</div>
+      ${isMine ? `<div class="log-actions">
+        <button class="secondary" onclick="startEditLog(${e.id})">Edit</button>
+        <button class="danger" onclick="deleteLogEntry(${e.id})">Delete</button>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
 async function checkAllStatus() {
   if (!state.settings.apiKey) {
     toast('Torn API key required. Set it in Settings.');
@@ -695,7 +927,8 @@ async function jsonbinWrite() {
     body: JSON.stringify({
       traders: state.traders,
       shitlist: state.shitlist,
-      inventory: state.inventory
+      inventory: state.inventory,
+      logbook: state.logbook
     })
   });
   if (!resp.ok) throw new Error(`JSONBin write failed: ${resp.status}`);
@@ -711,11 +944,13 @@ async function syncNow() {
       state.traders = record.traders || [];
       state.shitlist = record.shitlist || [];
       state.inventory = record.inventory || {};
+      state.logbook = record.logbook || [];
       state.lastSynced = new Date().toISOString();
       save();
       updateSyncStatus();
       renderTradersTab();
       renderCollections();
+      renderLogbook();
       toast('Synced');
     }
   } catch(e) {
@@ -772,11 +1007,13 @@ async function saveJsonbin() {
       state.traders = record.traders || [];
       state.shitlist = record.shitlist || [];
       state.inventory = record.inventory || {};
+      state.logbook = record.logbook || [];
       state.lastSynced = new Date().toISOString();
       save();
       updateSyncStatus();
       renderTradersTab();
       renderCollections();
+      renderLogbook();
       toast('Connected. Loaded ' + state.traders.length + ' traders, ' + state.shitlist.length + ' shit list.');
     }
   } catch(e) {
@@ -870,10 +1107,15 @@ function renderTraders() {
     container.innerHTML = '<div class="empty-state">No traders yet. Click "Add trader" to get started.</div>';
     return;
   }
-  const rows = [...state.traders].sort((a, b) => a.name.localeCompare(b.name));
+  const { col, dir } = sortState.traders;
+  const rows = [...state.traders].sort((a, b) => compareValues(a[col], b[col], dir));
   container.innerHTML = `<table>
     <thead><tr>
-      <th>Trader</th><th>Tags</th><th>Buys</th><th>Note</th><th>Links</th><th></th>
+      ${thHtml('traders', 'name', 'Trader', false)}
+      ${thHtml('traders', 'tags', 'Tags', false)}
+      ${thHtml('traders', 'buys', 'Buys', false)}
+      ${thHtml('traders', 'note', 'Note', false)}
+      <th>Links</th><th></th>
     </tr></thead>
     <tbody>${rows.map(t => {
       const onShitList = state.shitlist.find(s => s.tornId === t.tornId);
@@ -1182,7 +1424,6 @@ function renderLiveStock() {
   if (!state.yataData) { container.innerHTML = '<div class="empty-state">Click "Refresh data" to load foreign stock from YATA.</div>'; return; }
   const rows = extractStockRows();
   if (rows.length === 0) { container.innerHTML = '<div class="empty-state">YATA returned data but no rows parseable.</div>'; return; }
-  const sortBy = document.getElementById('live-sort').value;
   const minStock = parseInt(document.getElementById('live-min-stock').value) || 0;
   const capacity = parseInt(document.getElementById('live-capacity').value) || 19;
   const countryFilter = document.getElementById('live-country').value;
@@ -1197,18 +1438,22 @@ function renderLiveStock() {
     return { ...r, profitPerItem, totalProfit, profitPerHour, travelMin };
   }).filter(r => r.stock >= minStock && (countryFilter === 'all' || r.country === countryFilter));
 
-  enriched.sort((a, b) => {
-    if (sortBy === 'profit') return b.profitPerHour - a.profitPerHour;
-    if (sortBy === 'stock') return b.stock - a.stock;
-    if (sortBy === 'total') return b.totalProfit - a.totalProfit;
-    if (sortBy === 'country') return a.country.localeCompare(b.country) || b.profitPerHour - a.profitPerHour;
-  });
+  const { col, dir } = sortState.live;
+  enriched.sort((a, b) => compareValues(a[col], b[col], dir));
 
   if (enriched.length === 0) { container.innerHTML = '<div class="empty-state">No items match your filters.</div>'; return; }
   const hasMarketData = state.itemsData !== null;
   container.innerHTML = `<table><thead><tr>
-    <th>Country</th><th>Item</th><th>Stock</th><th>Buy</th>
-    ${hasMarketData ? '<th>Market</th><th>Profit/item</th><th>Total (@ cap)</th><th>$/hr</th>' : '<th colspan="4" style="font-weight:400;color:#888780">Add Torn API key in Settings for profit calcs</th>'}
+    ${thHtml('live', 'country', 'Country', false)}
+    ${thHtml('live', 'itemName', 'Item', false)}
+    ${thHtml('live', 'stock', 'Stock', true)}
+    ${thHtml('live', 'cost', 'Buy', true)}
+    ${hasMarketData
+      ? thHtml('live', 'marketValue', 'Market', true)
+        + thHtml('live', 'profitPerItem', 'Profit/item', true)
+        + thHtml('live', 'totalProfit', 'Total (@ cap)', true)
+        + thHtml('live', 'profitPerHour', '$/hr', true)
+      : '<th colspan="4" style="font-weight:400;color:#888780">Add Torn API key in Settings for profit calcs</th>'}
   </tr></thead>
   <tbody>${enriched.map(r => {
     let stockCls = 'stock-good';
@@ -1246,6 +1491,13 @@ function switchTab(tab) {
       if (ageMin > 1) syncNow();
     }
   }
+  if (tab === 'logbook') {
+    renderLogbook();
+    if (state.settings.binId && state.settings.binKey) {
+      const ageMin = state.lastSynced ? (Date.now() - new Date(state.lastSynced)) / 60000 : 999;
+      if (ageMin > 1) syncNow();
+    }
+  }
 }
 
 load();
@@ -1255,6 +1507,7 @@ document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () =>
 renderLiveStock();
 renderTradersTab();
 renderCollections();
+renderLogbook();
 updateYataStatus();
 updateSyncStatus();
 if (state.yataFetchedAt) {
