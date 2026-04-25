@@ -201,6 +201,7 @@
 
   <div class="filter-bar">
     <button onclick="refreshMyInventory()" id="refresh-inv-btn">Refresh my inventory</button>
+    <button class="secondary" onclick="showRawInventory()">Show raw response</button>
     <div class="hint" id="inv-status" style="margin-bottom:0">Inventory not loaded yet</div>
   </div>
 
@@ -412,11 +413,51 @@ async function refreshMyInventory() {
     const data = await resp.json();
     if (data.error) throw new Error(data.error.error);
 
-    // Convert inventory array to {id: qty} map
+    // Convert inventory to {id: qty} map - tolerant to multiple shapes
+    // Possible shapes Torn API has used:
+    //   1. Array of items: [{ID/id, name, quantity, ...}, ...]
+    //   2. Object keyed by something: {"123": {ID/id, name, quantity}, ...}
+    //   3. Wrapped: { inventory: [...] }
     const items = {};
-    if (Array.isArray(data.inventory)) {
-      for (const it of data.inventory) {
-        items[String(it.ID)] = (items[String(it.ID)] || 0) + (it.quantity || 0);
+    const raw = data.inventory;
+    state._lastRawInventory = data; // stash for debugging
+
+    function ingestItem(it) {
+      if (!it || typeof it !== 'object') return;
+      // Try various ID field names
+      const id = it.ID !== undefined ? it.ID
+              : it.id !== undefined ? it.id
+              : it.item_id !== undefined ? it.item_id
+              : null;
+      if (id === null) return;
+      const qty = it.quantity !== undefined ? it.quantity
+                : it.qty !== undefined ? it.qty
+                : it.amount !== undefined ? it.amount
+                : 1;
+      const idStr = String(id);
+      items[idStr] = (items[idStr] || 0) + (Number(qty) || 0);
+    }
+
+    if (Array.isArray(raw)) {
+      for (const it of raw) ingestItem(it);
+    } else if (raw && typeof raw === 'object') {
+      // It's keyed object — values could be item objects, OR the keys could be the IDs
+      for (const k in raw) {
+        const v = raw[k];
+        if (v && typeof v === 'object') {
+          // If the value has ID/id/quantity, treat it as an item
+          if (v.ID !== undefined || v.id !== undefined || v.item_id !== undefined) {
+            ingestItem(v);
+          } else if (v.quantity !== undefined || v.qty !== undefined) {
+            // Key is the ID, value has quantity but no ID field
+            const idStr = String(k);
+            const qty = v.quantity !== undefined ? v.quantity : v.qty;
+            items[idStr] = (items[idStr] || 0) + (Number(qty) || 0);
+          }
+        } else if (typeof v === 'number') {
+          // Key is ID, value is quantity directly
+          items[String(k)] = (items[String(k)] || 0) + v;
+        }
       }
     }
 
@@ -436,7 +477,12 @@ async function refreshMyInventory() {
     }
 
     renderCollections();
-    toast(`Inventory refreshed (${Object.keys(items).length} unique items)`);
+    const itemCount = Object.keys(items).length;
+    if (itemCount === 0) {
+      toast('Inventory fetched, but parser found 0 items. Click "Show raw response" to debug.');
+    } else {
+      toast(`Inventory refreshed (${itemCount} unique items)`);
+    }
   } catch(e) {
     console.error(e);
     toast('Inventory fetch failed: ' + e.message);
@@ -444,6 +490,18 @@ async function refreshMyInventory() {
 
   btn.textContent = 'Refresh my inventory';
   btn.disabled = false;
+}
+
+function showRawInventory() {
+  const container = document.getElementById('plushies-table-container');
+  if (!state._lastRawInventory) {
+    toast('No raw response yet — click Refresh first');
+    return;
+  }
+  const pre = document.createElement('pre');
+  pre.style.cssText = 'background:#2a2a28;color:#fff;padding:12px;border-radius:6px;overflow:auto;max-height:600px;font-size:11px;margin-top:12px';
+  pre.textContent = JSON.stringify(state._lastRawInventory, null, 2).slice(0, 8000) + '\n\n... (truncated if long)';
+  container.appendChild(pre);
 }
 
 function getCountryForItem(itemId) {
@@ -1200,7 +1258,13 @@ function switchTab(tab) {
   if (tab === 'live') renderLiveStock();
   if (tab === 'traders') {
     renderTradersTab();
-    // Auto-sync on tab open if configured
+    if (state.settings.binId && state.settings.binKey) {
+      const ageMin = state.lastSynced ? (Date.now() - new Date(state.lastSynced)) / 60000 : 999;
+      if (ageMin > 1) syncNow();
+    }
+  }
+  if (tab === 'collections') {
+    renderCollections();
     if (state.settings.binId && state.settings.binKey) {
       const ageMin = state.lastSynced ? (Date.now() - new Date(state.lastSynced)) / 60000 : 999;
       if (ageMin > 1) syncNow();
@@ -1214,6 +1278,7 @@ initSettings();
 document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
 renderLiveStock();
 renderTradersTab();
+renderCollections();
 updateYataStatus();
 updateSyncStatus();
 if (state.yataFetchedAt) {
