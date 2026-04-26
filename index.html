@@ -458,19 +458,26 @@ function planTrip(country) {
   const allRows = extractStockRows().filter(r => r.country === country && r.stock > 0);
   if (allRows.length === 0) return null;
 
-  // Split into flowers and others; FLOWER_IDS already defined for the Collections tab
   const flowerIdSet = new Set(FLOWER_IDS);
-  const flowers = allRows.filter(r => flowerIdSet.has(r.itemId));
-  const others = allRows.filter(r => !flowerIdSet.has(r.itemId));
-
-  // Sort each by profit per slot (descending). Need market data for this; if missing, fall back to stock priority.
-  const hasMarketData = state.itemsData !== null;
   const sortByProfit = (a, b) => (b.marketValue - b.cost) - (a.marketValue - a.cost);
-  flowers.sort(sortByProfit);
-  others.sort(sortByProfit);
 
+  // First, fill 5 flower-only slots from flowers (greedy by profit)
+  const flowers = allRows.filter(r => flowerIdSet.has(r.itemId)).sort(sortByProfit);
   const flowerFill = greedyFill(flowers, 5);
-  const otherFill = greedyFill(others, 19);
+
+  // For 19 paid slots: anything (including flowers), but reduce flower stock by what we already took
+  const flowerTakenById = {};
+  for (const p of flowerFill.picks) {
+    flowerTakenById[p.itemId] = (flowerTakenById[p.itemId] || 0) + p.qty;
+  }
+  const remainingItems = allRows
+    .map(r => {
+      const taken = flowerTakenById[r.itemId] || 0;
+      return { ...r, stock: r.stock - taken };
+    })
+    .filter(r => r.stock > 0)
+    .sort(sortByProfit);
+  const otherFill = greedyFill(remainingItems, 19);
 
   // Travel time
   const dest = DESTINATIONS.find(d => d.name === country);
@@ -484,6 +491,7 @@ function planTrip(country) {
   const totalSell = [...flowerFill.picks, ...otherFill.picks].reduce((s, p) => s + p.totalSell, 0);
   const totalProfit = totalSell - totalBuy;
   const profitPerHour = roundTripMin > 0 ? Math.round(totalProfit / (roundTripMin / 60)) : 0;
+  const hasMarketData = state.itemsData !== null;
 
   return {
     country,
