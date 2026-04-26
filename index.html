@@ -94,6 +94,21 @@
   .freshness.fresh { background: #EAF3DE; color: #27500A; }
   .freshness.mid   { background: #FAEEDA; color: #633806; }
   .freshness.stale { background: #FCEBEB; color: #791F1F; }
+  .country-link { color: #534AB7; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+  .country-link:hover { color: #3C3489; }
+  .trip-panel { background: #faf9f5; border: 1px solid #d3d1c7; border-radius: 8px; padding: 16px; margin-bottom: 16px; border-left: 3px solid #534AB7; }
+  .trip-panel h3 { margin-top: 0; display: flex; justify-content: space-between; align-items: center; }
+  .trip-close { background: transparent; color: #888780; padding: 4px 8px; font-size: 14px; }
+  .trip-close:hover { background: #e8e7e0; color: #2a2a28; }
+  .trip-section { margin-top: 14px; }
+  .trip-section h4 { margin: 0 0 6px; font-size: 13px; font-weight: 500; color: #5f5e5a; }
+  .trip-section table { font-size: 13px; }
+  .trip-section td { padding: 4px 8px; }
+  .trip-totals { margin-top: 14px; padding-top: 12px; border-top: 1px solid #d3d1c7; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .trip-totals .stat-card { background: white; }
+  .trip-totals .stat-value.profit { color: #27500A; }
+  .trip-totals .stat-value.cost { color: #BA7517; }
+  .trip-warning { background: #FAEEDA; color: #633806; padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-top: 10px; }
 </style>
 
 <h1>Torn Travel Tracker</h1>
@@ -125,6 +140,7 @@
     </div>
   </div>
   <p class="hint" id="last-refresh">No data yet</p>
+  <div id="trip-planner"></div>
   <div id="live-table-container"></div>
 </div>
 
@@ -399,6 +415,164 @@ function ageSinceUnix(unixSeconds) {
   else if (ageSec < 86400)   { text = Math.round(ageSec / 3600) + 'h ago'; cls = 'stale'; }
   else                       { text = Math.round(ageSec / 86400) + 'd ago'; cls = 'stale'; }
   return { text, cls };
+}
+
+// ============ TRIP PLANNER ============
+// Active country shown in the trip planner panel above the Live Stock table
+let plannedCountry = null;
+
+function setPlannedCountry(country) {
+  plannedCountry = (plannedCountry === country) ? null : country;
+  renderTripPlanner();
+}
+
+// Greedy fill: take the cheapest stock-limited slots from a sorted list of items.
+// Items must be sorted by desired priority (best first). Returns an array of
+// { itemId, name, qty, buyEach, sellEach, profitEach, totalBuy, totalSell, totalProfit }.
+function greedyFill(items, slots) {
+  const picks = [];
+  let slotsLeft = slots;
+  for (const it of items) {
+    if (slotsLeft <= 0) break;
+    const take = Math.min(it.stock, slotsLeft);
+    if (take <= 0) continue;
+    const profitEach = it.marketValue - it.cost;
+    picks.push({
+      itemId: it.itemId,
+      name: it.itemName,
+      qty: take,
+      buyEach: it.cost,
+      sellEach: it.marketValue,
+      profitEach,
+      totalBuy: take * it.cost,
+      totalSell: take * it.marketValue,
+      totalProfit: take * profitEach
+    });
+    slotsLeft -= take;
+  }
+  return { picks, slotsUnfilled: slotsLeft };
+}
+
+function planTrip(country) {
+  // Get all rows for this country from the existing parsed data
+  const allRows = extractStockRows().filter(r => r.country === country && r.stock > 0);
+  if (allRows.length === 0) return null;
+
+  // Split into flowers and others; FLOWER_IDS already defined for the Collections tab
+  const flowerIdSet = new Set(FLOWER_IDS);
+  const flowers = allRows.filter(r => flowerIdSet.has(r.itemId));
+  const others = allRows.filter(r => !flowerIdSet.has(r.itemId));
+
+  // Sort each by profit per slot (descending). Need market data for this; if missing, fall back to stock priority.
+  const hasMarketData = state.itemsData !== null;
+  const sortByProfit = (a, b) => (b.marketValue - b.cost) - (a.marketValue - a.cost);
+  flowers.sort(sortByProfit);
+  others.sort(sortByProfit);
+
+  const flowerFill = greedyFill(flowers, 5);
+  const otherFill = greedyFill(others, 19);
+
+  // Travel time
+  const dest = DESTINATIONS.find(d => d.name === country);
+  const travelMin = dest ? Math.round(dest.standardMin * state.settings.travelMethod) : 0;
+  const roundTripMin = travelMin * 2;
+
+  // Per-country freshness
+  const sampleRow = allRows[0];
+
+  const totalBuy = [...flowerFill.picks, ...otherFill.picks].reduce((s, p) => s + p.totalBuy, 0);
+  const totalSell = [...flowerFill.picks, ...otherFill.picks].reduce((s, p) => s + p.totalSell, 0);
+  const totalProfit = totalSell - totalBuy;
+  const profitPerHour = roundTripMin > 0 ? Math.round(totalProfit / (roundTripMin / 60)) : 0;
+
+  return {
+    country,
+    travelMin,
+    roundTripMin,
+    freshnessTs: sampleRow.countryUpdateTs,
+    flowerFill,
+    otherFill,
+    totalBuy,
+    totalSell,
+    totalProfit,
+    profitPerHour,
+    hasMarketData
+  };
+}
+
+function renderTripPlanner() {
+  const container = document.getElementById('trip-planner');
+  if (!container) return;
+  if (!plannedCountry) {
+    container.innerHTML = '';
+    return;
+  }
+  const trip = planTrip(plannedCountry);
+  if (!trip) {
+    container.innerHTML = `<div class="trip-panel">
+      <h3>${plannedCountry} <button class="trip-close" onclick="setPlannedCountry(null)">close ✕</button></h3>
+      <div class="trip-warning">No items in stock here right now (or YATA hasn't seen this country recently).</div>
+    </div>`;
+    return;
+  }
+
+  const age = ageSinceUnix(trip.freshnessTs);
+  const flowerRows = trip.flowerFill.picks;
+  const otherRows = trip.otherFill.picks;
+
+  const renderPicksTable = (picks, title, slotsRequested, slotsUnfilled) => {
+    if (picks.length === 0) {
+      return `<div class="trip-section"><h4>${title}</h4><div class="hint">No items available — ${slotsRequested} slots unfilled</div></div>`;
+    }
+    const filled = picks.reduce((s, p) => s + p.qty, 0);
+    const totalProfit = picks.reduce((s, p) => s + p.totalProfit, 0);
+    const totalBuy = picks.reduce((s, p) => s + p.totalBuy, 0);
+    const unfilledNote = slotsUnfilled > 0
+      ? `<div class="hint" style="color:#BA7517;margin-top:4px">${slotsUnfilled} slot${slotsUnfilled !== 1 ? 's' : ''} unfilled (not enough stock)</div>`
+      : '';
+    return `<div class="trip-section">
+      <h4>${title} — ${filled}/${slotsRequested} slots filled</h4>
+      <table>
+        <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Buy each</th><th class="num">Sell each</th><th class="num">Profit each</th><th class="num">Subtotal cost</th><th class="num">Subtotal profit</th></tr></thead>
+        <tbody>${picks.map(p => `<tr>
+          <td>${escapeHtml(p.name)}</td>
+          <td class="num">${p.qty}</td>
+          <td class="num">$${fmt(p.buyEach)}</td>
+          <td class="num">$${fmt(p.sellEach)}</td>
+          <td class="num">$${fmt(p.profitEach)}</td>
+          <td class="num">$${fmt(p.totalBuy)}</td>
+          <td class="num">$${fmt(p.totalProfit)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+      ${unfilledNote}
+    </div>`;
+  };
+
+  const noMarketWarning = !trip.hasMarketData
+    ? `<div class="trip-warning">Add a Torn API key in Settings to see profit calculations. Right now we're picking by stock availability only.</div>`
+    : '';
+
+  container.innerHTML = `<div class="trip-panel">
+    <h3>
+      <span>Trip plan — ${trip.country}
+        <span class="freshness ${age.cls}" style="margin-left:8px">data ${age.text}</span>
+        <span class="hint" style="margin-left:8px">round trip: ${trip.roundTripMin} min</span>
+      </span>
+      <button class="trip-close" onclick="setPlannedCountry(null)">close ✕</button>
+    </h3>
+
+    ${noMarketWarning}
+
+    ${renderPicksTable(flowerRows, '5 flower slots', 5, trip.flowerFill.slotsUnfilled)}
+    ${renderPicksTable(otherRows, '19 paid slots', 19, trip.otherFill.slotsUnfilled)}
+
+    <div class="trip-totals">
+      <div class="stat-card"><div class="stat-label">Cash to bring</div><div class="stat-value num cost">$${fmt(trip.totalBuy)}</div></div>
+      <div class="stat-card"><div class="stat-label">Expected revenue</div><div class="stat-value num">$${fmt(trip.totalSell)}</div></div>
+      <div class="stat-card"><div class="stat-label">Expected profit</div><div class="stat-value num profit">$${fmt(trip.totalProfit)}</div></div>
+      <div class="stat-card"><div class="stat-label">$/hr</div><div class="stat-value num">$${fmt(trip.profitPerHour)}</div></div>
+    </div>
+  </div>`;
 }
 
 // ============ SORT STATE (per-session) ============
@@ -1595,8 +1769,9 @@ function renderLiveStock() {
       ? `<td class="num">$${fmt(r.marketValue)}</td><td class="num">$${fmt(r.profitPerItem)}</td><td class="num">$${fmt(r.totalProfit)}</td><td class="num">$${fmt(r.profitPerHour)}</td>`
       : '<td colspan="4" style="color:#888780">—</td>';
     const age = ageSinceUnix(r.countryUpdateTs);
-    return `<tr><td>${r.country}</td><td><span class="freshness ${age.cls}">${age.text}</span></td><td>${escapeHtml(r.itemName)}</td><td class="num ${stockCls}">${fmt(r.stock)}</td><td class="num">$${fmt(r.cost)}</td>${profitCell}</tr>`;
+    return `<tr><td><span class="country-link" onclick="setPlannedCountry('${r.country.replace(/'/g, "\\'")}')">${r.country}</span></td><td><span class="freshness ${age.cls}">${age.text}</span></td><td>${escapeHtml(r.itemName)}</td><td class="num ${stockCls}">${fmt(r.stock)}</td><td class="num">$${fmt(r.cost)}</td>${profitCell}</tr>`;
   }).join('')}</tbody></table>`;
+  renderTripPlanner();
 }
 
 function saveSettings() {
