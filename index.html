@@ -298,6 +298,10 @@
     </div>
     <div><label>Timezone offset from TCT</label><input type="number" id="tz-offset" value="-7" /><div class="hint">PDT = -7, PST = -8</div></div>
   </div>
+  <div class="form-row">
+    <div><label>Paid travel slots</label><input type="number" id="paid-slots" value="19" min="1" /><div class="hint">Base travel slots that can hold any item. Yours depends on suitcase, faction perks, education, etc.</div></div>
+    <div><label>Flower bonus slots</label><input type="number" id="flower-slots" value="5" min="0" /><div class="hint">Extra flower-only slots from job perk. 0 if you don't have it.</div></div>
+  </div>
   <button onclick="saveSettings()">Save settings</button>
 
   <h3 style="margin-top:28px">About</h3>
@@ -364,7 +368,7 @@ const PLUSHIE_IDS = ['186', '215', '187', '261', '618', '258', '273', '269', '26
 const FLOWER_IDS = ['260', '617', '263', '272', '264', '271', '267', '277', '282', '276', '385'];
 
 let state = {
-  settings: { tzOffset: -7, travelMethod: 0.7, apiKey: '', binId: '', binKey: '' },
+  settings: { tzOffset: -7, travelMethod: 0.7, apiKey: '', binId: '', binKey: '', paidSlots: 19, flowerSlots: 5 },
   yataData: null, yataFetchedAt: null,
   // Price memory: { 'Country|itemId': { country, itemId, name, cost, lastSeenAt, lastSeenStock } }
   // Updated every YATA refresh — remembers the most recent observed buy price for things we've seen in stock.
@@ -464,11 +468,15 @@ function planTrip(country) {
   const flowerIdSet = new Set(FLOWER_IDS);
   const sortByProfit = (a, b) => (b.marketValue - b.cost) - (a.marketValue - a.cost);
 
-  // First, fill 5 flower-only slots from flowers (greedy by profit)
-  const flowers = allRows.filter(r => flowerIdSet.has(r.itemId)).sort(sortByProfit);
-  const flowerFill = greedyFill(flowers, 5);
+  // Pull configured capacity from settings
+  const flowerSlots = state.settings.flowerSlots != null ? state.settings.flowerSlots : 5;
+  const paidSlots = state.settings.paidSlots || 19;
 
-  // For 19 paid slots: anything (including flowers), but reduce flower stock by what we already took
+  // First, fill flower-only slots from flowers (greedy by profit)
+  const flowers = allRows.filter(r => flowerIdSet.has(r.itemId)).sort(sortByProfit);
+  const flowerFill = greedyFill(flowers, flowerSlots);
+
+  // For paid slots: anything (including flowers), but reduce flower stock by what we already took
   const flowerTakenById = {};
   for (const p of flowerFill.picks) {
     flowerTakenById[p.itemId] = (flowerTakenById[p.itemId] || 0) + p.qty;
@@ -480,14 +488,13 @@ function planTrip(country) {
     })
     .filter(r => r.stock > 0)
     .sort(sortByProfit);
-  const otherFill = greedyFill(remainingItems, 19);
+  const otherFill = greedyFill(remainingItems, paidSlots);
 
   // Travel time
   const dest = DESTINATIONS.find(d => d.name === country);
   const travelMin = dest ? Math.round(dest.standardMin * state.settings.travelMethod) : 0;
   const roundTripMin = travelMin * 2;
 
-  // Per-country freshness
   const sampleRow = allRows[0];
 
   const totalBuy = [...flowerFill.picks, ...otherFill.picks].reduce((s, p) => s + p.totalBuy, 0);
@@ -503,6 +510,8 @@ function planTrip(country) {
     freshnessTs: sampleRow.countryUpdateTs,
     flowerFill,
     otherFill,
+    flowerSlots,
+    paidSlots,
     totalBuy,
     totalSell,
     totalProfit,
@@ -533,7 +542,9 @@ function computeWhatIfProjections(country, currentTrip) {
     if (!marketValue) continue; // can't project profit without market data
 
     const isFlower = flowerIdSet.has(m.itemId);
-    const slots = isFlower ? 5 : 19;
+    const flowerSlots = state.settings.flowerSlots != null ? state.settings.flowerSlots : 5;
+    const paidSlots = state.settings.paidSlots || 19;
+    const slots = isFlower ? flowerSlots : paidSlots;
     const profitEach = marketValue - m.cost;
 
     candidates.push({
@@ -640,8 +651,8 @@ function renderTripPlanner() {
 
     ${noMarketWarning}
 
-    ${renderPicksTable(flowerRows, '5 flower slots', 5, trip.flowerFill.slotsUnfilled)}
-    ${renderPicksTable(otherRows, '19 paid slots', 19, trip.otherFill.slotsUnfilled)}
+    ${renderPicksTable(flowerRows, `${trip.flowerSlots} flower slot${trip.flowerSlots !== 1 ? 's' : ''}`, trip.flowerSlots, trip.flowerFill.slotsUnfilled)}
+    ${renderPicksTable(otherRows, `${trip.paidSlots} paid slot${trip.paidSlots !== 1 ? 's' : ''}`, trip.paidSlots, trip.otherFill.slotsUnfilled)}
 
     ${(() => {
       const projections = computeWhatIfProjections(trip.country, trip);
@@ -1667,6 +1678,11 @@ function populateDestDropdown() {
 function initSettings() {
   document.getElementById('tz-offset').value = state.settings.tzOffset;
   document.getElementById('travel-method').value = state.settings.travelMethod;
+  document.getElementById('paid-slots').value = state.settings.paidSlots || 19;
+  document.getElementById('flower-slots').value = state.settings.flowerSlots != null ? state.settings.flowerSlots : 5;
+  // Sync the Live Stock capacity input to the saved paid-slots default
+  const liveCap = document.getElementById('live-capacity');
+  if (liveCap) liveCap.value = state.settings.paidSlots || 19;
   if (state.settings.apiKey) {
     document.getElementById('api-key').value = state.settings.apiKey;
     setTornStatus('good', 'Torn API: key set');
@@ -1899,7 +1915,14 @@ function renderLiveStock() {
 function saveSettings() {
   state.settings.tzOffset = parseFloat(document.getElementById('tz-offset').value) || -7;
   state.settings.travelMethod = parseFloat(document.getElementById('travel-method').value) || 0.7;
+  state.settings.paidSlots = Math.max(1, parseInt(document.getElementById('paid-slots').value) || 19);
+  state.settings.flowerSlots = Math.max(0, parseInt(document.getElementById('flower-slots').value) || 0);
+  // Update Live Stock capacity input to match new default
+  const liveCap = document.getElementById('live-capacity');
+  if (liveCap) liveCap.value = state.settings.paidSlots;
   save();
+  // Re-render Live Stock + trip planner with new capacity
+  renderLiveStock();
   toast('Settings saved');
 }
 
