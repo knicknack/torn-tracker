@@ -366,6 +366,9 @@ const FLOWER_IDS = ['260', '617', '263', '272', '264', '271', '267', '277', '282
 let state = {
   settings: { tzOffset: -7, travelMethod: 0.7, apiKey: '', binId: '', binKey: '' },
   yataData: null, yataFetchedAt: null,
+  // Price memory: { 'Country|itemId': { country, itemId, name, cost, lastSeenAt, lastSeenStock } }
+  // Updated every YATA refresh — remembers the most recent observed buy price for things we've seen in stock.
+  priceMemory: {},
   itemsData: null, itemsFetchedAt: null,
   // Shared data:
   traders: [],
@@ -508,6 +511,52 @@ function planTrip(country) {
   };
 }
 
+function computeWhatIfProjections(country, currentTrip) {
+  // Look up priceMemory entries for this country whose items are NOT currently in stock.
+  // For each, project what they'd add if they were stocked (using slot constraints).
+  const flowerIdSet = new Set(FLOWER_IDS);
+  const memory = state.priceMemory || {};
+  const itemsInStockNow = new Set(extractStockRows().filter(r => r.country === country && r.stock > 0).map(r => r.itemId));
+  const cutoffMs = 30 * 24 * 60 * 60 * 1000; // 30 days
+  const now = Date.now();
+
+  const candidates = [];
+  for (const key in memory) {
+    const m = memory[key];
+    if (m.country !== country) continue;
+    if (itemsInStockNow.has(m.itemId)) continue; // it's actually in stock right now, skip
+    if (!m.lastSeenAt || now - m.lastSeenAt > cutoffMs) continue;
+
+    // Look up market value
+    const itemInfo = (state.itemsData && state.itemsData[m.itemId]) || {};
+    const marketValue = itemInfo.market_value || 0;
+    if (!marketValue) continue; // can't project profit without market data
+
+    const isFlower = flowerIdSet.has(m.itemId);
+    const slots = isFlower ? 5 : 19;
+    const profitEach = marketValue - m.cost;
+
+    candidates.push({
+      itemId: m.itemId,
+      name: m.name || (itemInfo.name) || `Item #${m.itemId}`,
+      cost: m.cost,
+      marketValue,
+      profitEach,
+      lastSeenAt: m.lastSeenAt,
+      lastSeenStock: m.lastSeenStock,
+      isFlower,
+      slots,
+      cashIfFilled: slots * m.cost,
+      revenueIfFilled: slots * marketValue,
+      profitIfFilled: slots * profitEach
+    });
+  }
+
+  // Sort by profit potential, descending
+  candidates.sort((a, b) => b.profitIfFilled - a.profitIfFilled);
+  return candidates;
+}
+
 function renderTripPlanner() {
   const container = document.getElementById('trip-planner');
   if (!container) return;
@@ -517,9 +566,29 @@ function renderTripPlanner() {
   }
   const trip = planTrip(plannedCountry);
   if (!trip) {
+    const projections = computeWhatIfProjections(plannedCountry, null);
+    const projectionsHtml = projections.length === 0 ? '' : `
+      <div class="trip-section" style="margin-top:14px">
+        <h4>If these were in stock — based on prices we've seen before</h4>
+        <table>
+          <thead><tr><th>Item</th><th class="num">Last seen</th><th class="num">Buy each</th><th class="num">Profit each</th><th class="num">If full: cash</th><th class="num">If full: profit</th></tr></thead>
+          <tbody>${projections.map(p => {
+            const a = ageSinceUnix(Math.floor(p.lastSeenAt / 1000));
+            return `<tr>
+              <td>${escapeHtml(p.name)}${p.isFlower ? ' <span class="hint">(flower)</span>' : ''}</td>
+              <td class="num">${a.text}</td>
+              <td class="num">$${fmt(p.cost)}</td>
+              <td class="num">$${fmt(p.profitEach)}</td>
+              <td class="num">$${fmt(p.cashIfFilled)}</td>
+              <td class="num" style="color:#27500A">$${fmt(p.profitIfFilled)}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>`;
     container.innerHTML = `<div class="trip-panel">
       <h3>${plannedCountry} <button class="trip-close" onclick="setPlannedCountry(null)">close ✕</button></h3>
       <div class="trip-warning">No items in stock here right now (or YATA hasn't seen this country recently).</div>
+      ${projectionsHtml}
     </div>`;
     return;
   }
@@ -573,6 +642,30 @@ function renderTripPlanner() {
 
     ${renderPicksTable(flowerRows, '5 flower slots', 5, trip.flowerFill.slotsUnfilled)}
     ${renderPicksTable(otherRows, '19 paid slots', 19, trip.otherFill.slotsUnfilled)}
+
+    ${(() => {
+      const projections = computeWhatIfProjections(trip.country, trip);
+      if (projections.length === 0) return '';
+      const ageText = (ts) => {
+        const a = ageSinceUnix(Math.floor(ts / 1000));
+        return a.text;
+      };
+      return `<div class="trip-section">
+        <h4>If these were in stock — based on prices we've seen before</h4>
+        <div class="hint" style="margin-bottom:6px">Items not currently stocked but observed in this country recently. Projection assumes a full slot allocation (5 for flowers, 19 for others) at the last-seen price.</div>
+        <table>
+          <thead><tr><th>Item</th><th class="num">Last seen</th><th class="num">Buy each</th><th class="num">Profit each</th><th class="num">If full: cash</th><th class="num">If full: profit</th></tr></thead>
+          <tbody>${projections.map(p => `<tr>
+            <td>${escapeHtml(p.name)}${p.isFlower ? ' <span class="hint">(flower)</span>' : ''}</td>
+            <td class="num">${ageText(p.lastSeenAt)}</td>
+            <td class="num">$${fmt(p.cost)}</td>
+            <td class="num">$${fmt(p.profitEach)}</td>
+            <td class="num">$${fmt(p.cashIfFilled)}</td>
+            <td class="num" style="color:#27500A">$${fmt(p.profitIfFilled)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+    })()}
 
     <div class="trip-totals">
       <div class="stat-card"><div class="stat-label">Cash to bring</div><div class="stat-value num cost">$${fmt(trip.totalBuy)}</div></div>
@@ -1645,9 +1738,30 @@ async function fetchYataStock() {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     state.yataData = await resp.json();
     state.yataFetchedAt = new Date().toISOString();
+    updatePriceMemory();
     save();
     return true;
   } catch(e) { console.error(e); toast('YATA fetch failed: ' + e.message); return false; }
+}
+
+function updatePriceMemory() {
+  // Walk the latest YATA data; for any item with stock > 0, record/update its cost in priceMemory.
+  // Items at 0 stock leave the existing memory untouched (we keep the last seen price).
+  const rows = extractStockRows();
+  const now = Date.now();
+  if (!state.priceMemory) state.priceMemory = {};
+  for (const r of rows) {
+    if (r.stock <= 0) continue;
+    const key = `${r.country}|${r.itemId}`;
+    state.priceMemory[key] = {
+      country: r.country,
+      itemId: r.itemId,
+      name: r.itemName,
+      cost: r.cost,
+      lastSeenAt: now,
+      lastSeenStock: r.stock
+    };
+  }
 }
 
 async function fetchTornItems() {
