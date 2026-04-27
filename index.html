@@ -133,6 +133,7 @@
   </div>
   <div class="filter-bar">
     <button onclick="refreshAll()" id="refresh-btn">Refresh data</button>
+    <div style="flex:1;min-width:160px"><label>Search</label><input type="search" id="live-search" placeholder="Filter by item name..." oninput="renderLiveStock()" /></div>
     <div><label>Min stock</label><input type="number" id="live-min-stock" value="0" style="width:90px" onchange="renderLiveStock()" /></div>
     <div><label>Capacity</label><input type="number" id="live-capacity" value="19" style="width:80px" onchange="renderLiveStock()" /></div>
     <div><label>Country</label>
@@ -686,7 +687,7 @@ function renderTripPlanner() {
       };
       return `<div class="trip-section">
         <h4>If these were in stock — based on prices we've seen before</h4>
-        <div class="hint" style="margin-bottom:6px">Items not currently stocked but observed in this country recently. Projection assumes a full slot allocation (5 for flowers, 19 for others) at the last-seen price.</div>
+        <div class="hint" style="margin-bottom:6px">Items not currently stocked but observed in this country recently. Projection assumes a full slot allocation (${state.settings.flowerSlots != null ? state.settings.flowerSlots : 5} for flowers, ${state.settings.paidSlots || 19} for others) at the last-seen price.</div>
         <table>
           <thead><tr><th>Item</th><th class="num">Last seen</th><th class="num">Buy each</th><th class="num">Profit each</th><th class="num">If full: cash</th><th class="num">If full: profit</th></tr></thead>
           <tbody>${projections.map(p => `<tr>
@@ -1893,6 +1894,8 @@ function renderLiveStock() {
   const minStock = parseInt(document.getElementById('live-min-stock').value) || 0;
   const capacity = parseInt(document.getElementById('live-capacity').value) || 19;
   const countryFilter = document.getElementById('live-country').value;
+  const searchEl = document.getElementById('live-search');
+  const searchTerm = (searchEl ? searchEl.value : '').toLowerCase().trim();
 
   const enriched = rows.map(r => {
     const profitPerItem = r.marketValue - r.cost;
@@ -1902,7 +1905,11 @@ function renderLiveStock() {
     const hoursPerFlight = (travelMin * 2) / 60;
     const profitPerHour = hoursPerFlight > 0 ? Math.round(totalProfit / hoursPerFlight) : 0;
     return { ...r, profitPerItem, totalProfit, profitPerHour, travelMin };
-  }).filter(r => r.stock >= minStock && (countryFilter === 'all' || r.country === countryFilter));
+  }).filter(r =>
+    r.stock >= minStock
+    && (countryFilter === 'all' || r.country === countryFilter)
+    && (searchTerm === '' || r.itemName.toLowerCase().includes(searchTerm))
+  );
 
   const { col, dir } = sortState.live;
   enriched.sort((a, b) => compareValues(a[col], b[col], dir));
