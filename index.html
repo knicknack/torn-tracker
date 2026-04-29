@@ -34,9 +34,9 @@
   th { text-align: left; padding: 8px; background: #f5f5f0; border-bottom: 1px solid #d3d1c7; font-weight: 500; color: #5f5e5a; white-space: nowrap; }
   th.sortable { cursor: pointer; user-select: none; }
   th.sortable:hover { background: #eeece5; }
-  th.sortable::after { content: ' ⇅'; opacity: 0.3; font-size: 11px; }
-  th.sort-asc::after { content: ' ↑'; opacity: 1; font-size: 11px; }
-  th.sort-desc::after { content: ' ↓'; opacity: 1; font-size: 11px; }
+  th.sortable::after { content: ' \u21c5'; opacity: 0.3; font-size: 11px; }
+  th.sort-asc::after { content: ' \u2191'; opacity: 1; font-size: 11px; }
+  th.sort-desc::after { content: ' \u2193'; opacity: 1; font-size: 11px; }
   td { padding: 8px; border-bottom: 1px solid #e8e7e0; vertical-align: top; }
   tr:hover td { background: #faf9f5; }
   td a { color: #534AB7; text-decoration: none; font-weight: 500; }
@@ -109,10 +109,18 @@
   .trip-totals .stat-value.profit { color: #27500A; }
   .trip-totals .stat-value.cost { color: #BA7517; }
   .trip-warning { background: #FAEEDA; color: #633806; padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-top: 10px; }
+  /* Restock timer */
+  .restock-panel { background: #fdf9f0; border: 1px solid #d3d1c7; border-radius: 8px; padding: 16px; margin-bottom: 16px; border-left: 3px solid #B07D2E; }
+  .restock-panel h3 { margin-top: 0; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+  .restock-outputs { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid #e8e7e0; align-items: flex-end; }
+  .restock-outputs .out-block { display: flex; flex-direction: column; gap: 3px; }
+  .restock-outputs .out-label { font-size: 11px; color: #888780; text-transform: uppercase; letter-spacing: 0.04em; }
+  .restock-outputs .out-val { font-size: 15px; font-weight: 500; }
+  .restock-outputs .out-val.leave-time { font-size: 24px; color: #534AB7; }
 </style>
 
 <h1>Torn Travel Tracker</h1>
-<p class="subtitle">Live stock · traders · collections · logbook · settings</p>
+<p class="subtitle">Live stock \xb7 traders \xb7 collections \xb7 logbook \xb7 settings</p>
 <div class="status-bar">
   <span id="yata-status" class="status-chip warn">YATA: not loaded</span>
   <span id="torn-status" class="status-chip warn">Torn API: no key</span>
@@ -139,8 +147,47 @@
     <div><label>Country</label>
       <select id="live-country" onchange="renderLiveStock()"><option value="all">All countries</option></select>
     </div>
+    <button class="secondary" onclick="toggleRestockTimer()" id="restock-timer-btn">\u23f1 Restock timer</button>
   </div>
   <p class="hint" id="last-refresh">No data yet</p>
+
+  <div id="restock-timer-panel" class="restock-panel" style="display:none">
+    <h3>
+      \u23f1 Restock timer
+      <button class="trip-close" onclick="toggleRestockTimer()">close \u2715</button>
+    </h3>
+    <div class="form-row" style="margin-bottom:0">
+      <div>
+        <label>Country</label>
+        <select id="rt-country" onchange="calcRestock()"></select>
+      </div>
+      <div>
+        <label>Restock time (your local time)</label>
+        <input type="time" id="rt-restock-time" oninput="calcRestock()" />
+      </div>
+      <div>
+        <label>Arrive this long after restock (min)</label>
+        <input type="number" id="rt-buffer" value="137" min="0" max="480" oninput="calcRestock()" />
+        <div class="hint">137 min = 2h 17m \u2014 your Argentina fossils default</div>
+      </div>
+    </div>
+    <div class="restock-outputs">
+      <div class="out-block">
+        <span class="out-label">Flight time</span>
+        <span class="out-val" id="rt-flight">\u2014</span>
+      </div>
+      <div class="out-block">
+        <span class="out-label">Target arrival</span>
+        <span class="out-val" id="rt-arrive">\u2014</span>
+      </div>
+      <div class="out-block">
+        <span class="out-label">Leave by</span>
+        <span class="out-val leave-time" id="rt-leave">\u2014</span>
+      </div>
+    </div>
+    <p class="hint" id="rt-note" style="margin-top:8px;color:#BA7517"></p>
+  </div>
+
   <div id="trip-planner"></div>
   <div id="live-table-container"></div>
 </div>
@@ -149,8 +196,6 @@
   <div id="sync-unconfigured-banner" style="display:none" class="data-source-note">
     <strong>Shared lists not configured.</strong> Go to Settings and set up JSONBin to share this with PlyBur. Until then, lists are empty.
   </div>
-
-  <!-- Our Traders section -->
   <div class="section-header">
     <h2>Our traders</h2>
     <div>
@@ -160,7 +205,6 @@
     </div>
   </div>
   <p class="hint" id="status-checked-at" style="margin-top:-8px;margin-bottom:12px">Status not checked yet</p>
-
   <div class="add-form" id="trader-form">
     <h3 id="trader-form-title" style="margin-top:0">Add trader</h3>
     <div class="form-row">
@@ -180,15 +224,11 @@
     <button onclick="saveTraderForm()" id="add-trader-btn">Save trader</button>
     <button class="secondary" onclick="cancelTraderForm()">Cancel</button>
   </div>
-
   <div id="traders-table-container"></div>
-
-  <!-- Shit list section -->
   <div class="section-header">
     <h2>Shit list</h2>
     <button class="small" onclick="toggleShitForm()">+ Add entry</button>
   </div>
-
   <div class="add-form" id="shit-form">
     <h3 id="shit-form-title" style="margin-top:0">Add to shit list</h3>
     <div class="form-row">
@@ -213,15 +253,10 @@
     <button onclick="saveShitForm()" id="add-shit-btn">Save entry</button>
     <button class="secondary" onclick="cancelShitForm()">Cancel</button>
   </div>
-
   <div id="shit-table-container"></div>
-
-  <!-- TE top 30 section -->
   <div class="section-header">
     <h2>Top 30 on TornExchange</h2>
-    <div>
-      <a href="https://www.tornexchange.com/listings" target="_blank" rel="noopener" style="font-size:12px;text-decoration:none;color:#534AB7">Search item on TE ↗</a>
-    </div>
+    <div><a href="https://www.tornexchange.com/listings" target="_blank" rel="noopener" style="font-size:12px;text-decoration:none;color:#534AB7">Search item on TE \u2197</a></div>
   </div>
   <p class="section-desc">Last 30 days of activity. Click a name for their price list.</p>
   <div id="te-top-container"></div>
@@ -229,21 +264,17 @@
 
 <div id="collections" class="panel">
   <div id="collections-unconfigured" style="display:none" class="data-source-note">
-    <strong>Set up your Torn API key first.</strong> Go to Settings, paste your API key. The key is needed to load item names and identify your column.
+    <strong>Set up your Torn API key first.</strong> Go to Settings, paste your API key.
   </div>
-
   <div class="data-source-note">
-    Track your plushie and flower collections by typing how many of each you have. Edits autosave to the shared list. The "Available now" column pulls from YATA — refresh Live Stock first to see where to find missing items.
+    Track your plushie and flower collections by typing how many of each you have. Edits autosave to the shared list. The "Available now" column pulls from YATA.
   </div>
-
   <div class="filter-bar">
     <button class="secondary" onclick="loadItemNames()" id="refresh-inv-btn">Reload item names</button>
     <div class="hint" id="inv-status" style="margin-bottom:0">Edits autosave</div>
   </div>
-
   <h2 style="margin-top:24px">Plushies <span style="font-weight:400;font-size:13px;color:#888780" id="plushies-summary"></span></h2>
   <div id="plushies-table-container"></div>
-
   <h2 style="margin-top:32px">Flowers <span style="font-weight:400;font-size:13px;color:#888780" id="flowers-summary"></span></h2>
   <div id="flowers-table-container"></div>
 </div>
@@ -252,7 +283,6 @@
   <div id="logbook-unconfigured" style="display:none" class="data-source-note">
     <strong>Set your Torn API key first.</strong> The logbook needs to know who you are to stamp entries with your name.
   </div>
-
   <div class="add-form open" id="logbook-form" style="margin-top:0">
     <label>New entry</label>
     <textarea id="logbook-text" placeholder="What's happening? Where are you? What's worth remembering?" style="min-height:80px"></textarea>
@@ -261,21 +291,19 @@
       <span class="hint" id="log-location-preview" style="margin-top:0">Location will be stamped at save time</span>
     </div>
   </div>
-
   <div id="logbook-entries"></div>
 </div>
 
 <div id="settings" class="panel">
   <h3>Torn API</h3>
   <div class="api-setup">
-    <p class="section-desc" style="margin-top:0">Your Public-level API key. Required to look up trader names when you paste a profile URL. Get one at <code>torn.com</code> → Settings → API Key.</p>
+    <p class="section-desc" style="margin-top:0">Your Public-level API key. Get one at <code>torn.com</code> \u2192 Settings \u2192 API Key.</p>
     <div class="form-row">
       <div><label>API key (16 characters)</label><input type="password" id="api-key" placeholder="Paste your Torn API key" /></div>
-      <div><label>&nbsp;</label><button onclick="saveApiKey()">Save & test</button></div>
+      <div><label>&nbsp;</label><button onclick="saveApiKey()">Save &amp; test</button></div>
     </div>
     <button class="secondary" onclick="clearApiKey()">Remove key</button>
   </div>
-
   <h3>Shared lists (JSONBin)</h3>
   <div class="api-setup">
     <p class="section-desc" style="margin-top:0">Ask Hunka for the secret digits.</p>
@@ -283,10 +311,9 @@
       <div><label>Bin ID</label><input type="text" id="bin-id" placeholder="e.g. 65a1b2c3d4e5f6..." /></div>
       <div><label>Master Key</label><input type="password" id="bin-key" placeholder="$2a$10$..." /></div>
     </div>
-    <button onclick="saveJsonbin()">Save & test connection</button>
+    <button onclick="saveJsonbin()">Save &amp; test connection</button>
     <button class="secondary" onclick="clearJsonbin()">Remove credentials</button>
   </div>
-
   <h3>Travel preferences</h3>
   <div class="form-row">
     <div><label>Travel method</label>
@@ -300,13 +327,12 @@
     <div><label>Timezone offset from TCT</label><input type="number" id="tz-offset" value="-7" /><div class="hint">PDT = -7, PST = -8</div></div>
   </div>
   <div class="form-row">
-    <div><label>Paid travel slots</label><input type="number" id="paid-slots" value="19" min="1" /><div class="hint">Base travel slots that can hold any item. Yours depends on suitcase, faction perks, education, etc.</div></div>
-    <div><label>Flower bonus slots</label><input type="number" id="flower-slots" value="5" min="0" /><div class="hint">Extra flower-only slots from job perk. 0 if you don't have it.</div></div>
+    <div><label>Paid travel slots</label><input type="number" id="paid-slots" value="19" min="1" /><div class="hint">Base travel slots that can hold any item.</div></div>
+    <div><label>Flower bonus slots</label><input type="number" id="flower-slots" value="5" min="0" /><div class="hint">Extra flower-only slots from job perk.</div></div>
   </div>
   <button onclick="saveSettings()">Save settings</button>
-
   <h3 style="margin-top:28px">About</h3>
-  <p class="section-desc">A small private dashboard for foreign-shop merching. Stock data is crowd-sourced from YATA. Traders, shit list, inventory, and logbook entries are stored in a shared JSONBin so two people can share the same view. The Torn API is used for usernames, market prices, online status, and location stamps. Nothing is logged to any server beyond the shared list contents on JSONBin, which only people with the Master Key can read.</p>
+  <p class="section-desc">A small private dashboard for foreign-shop merching. Stock data from YATA. Traders, shit list, inventory, and logbook stored in a shared JSONBin. Nothing logged to any server beyond the shared list contents on JSONBin, which only people with the Master Key can read.</p>
 </div>
 
 <div id="toast" class="toast"></div>
@@ -327,1678 +353,239 @@ const DESTINATIONS = [
 ];
 
 const TE_TOP_30 = [
-  { rank: 1, name: 'Muckamuck', trades: 5333 },
-  { rank: 2, name: 'begaydocrimes', trades: 2161 },
-  { rank: 3, name: 'FrostyTheXanMan', trades: 2133 },
-  { rank: 4, name: 'LMN_OP', trades: 2079 },
-  { rank: 5, name: 'M4rshmall0w', trades: 1774 },
-  { rank: 6, name: 'Dracula', trades: 1628 },
-  { rank: 7, name: 'Friends', trades: 1610 },
-  { rank: 8, name: 'xeven', trades: 1380 },
-  { rank: 9, name: 'SavageGrace', trades: 1159 },
-  { rank: 10, name: 'VexRemington', trades: 1089 },
-  { rank: 11, name: 'iSonicV', trades: 951 },
-  { rank: 12, name: 'Turkeybop6141', trades: 946 },
-  { rank: 13, name: 'MKBBGL', trades: 893 },
-  { rank: 14, name: 'Smez', trades: 872 },
-  { rank: 15, name: 'badfriend', trades: 742 },
-  { rank: 16, name: '-Josh-', trades: 728 },
-  { rank: 17, name: 'Emsilo', trades: 715 },
-  { rank: 18, name: 'AltairYanyan', trades: 691 },
-  { rank: 19, name: 'ankitjainaj', trades: 662 },
-  { rank: 20, name: 'the_khush', trades: 603 },
-  { rank: 21, name: 'Minitamark', trades: 566 },
-  { rank: 22, name: 'WhackedMaki', trades: 555 },
-  { rank: 23, name: 'joshieb', trades: 543 },
-  { rank: 24, name: 'Drunkinahole', trades: 527 },
-  { rank: 25, name: 'OldGoat', trades: 526 },
-  { rank: 26, name: 'Trivia-', trades: 509 },
-  { rank: 27, name: 'Prophecy', trades: 504 },
-  { rank: 28, name: '04doolant', trades: 504 },
-  { rank: 29, name: 'BlueChedow', trades: 492 },
-  { rank: 30, name: 'Heartflower', trades: 486 }
+  { rank: 1, name: 'Muckamuck', trades: 5333 },{ rank: 2, name: 'begaydocrimes', trades: 2161 },
+  { rank: 3, name: 'FrostyTheXanMan', trades: 2133 },{ rank: 4, name: 'LMN_OP', trades: 2079 },
+  { rank: 5, name: 'M4rshmall0w', trades: 1774 },{ rank: 6, name: 'Dracula', trades: 1628 },
+  { rank: 7, name: 'Friends', trades: 1610 },{ rank: 8, name: 'xeven', trades: 1380 },
+  { rank: 9, name: 'SavageGrace', trades: 1159 },{ rank: 10, name: 'VexRemington', trades: 1089 },
+  { rank: 11, name: 'iSonicV', trades: 951 },{ rank: 12, name: 'Turkeybop6141', trades: 946 },
+  { rank: 13, name: 'MKBBGL', trades: 893 },{ rank: 14, name: 'Smez', trades: 872 },
+  { rank: 15, name: 'badfriend', trades: 742 },{ rank: 16, name: '-Josh-', trades: 728 },
+  { rank: 17, name: 'Emsilo', trades: 715 },{ rank: 18, name: 'AltairYanyan', trades: 691 },
+  { rank: 19, name: 'ankitjainaj', trades: 662 },{ rank: 20, name: 'the_khush', trades: 603 },
+  { rank: 21, name: 'Minitamark', trades: 566 },{ rank: 22, name: 'WhackedMaki', trades: 555 },
+  { rank: 23, name: 'joshieb', trades: 543 },{ rank: 24, name: 'Drunkinahole', trades: 527 },
+  { rank: 25, name: 'OldGoat', trades: 526 },{ rank: 26, name: 'Trivia-', trades: 509 },
+  { rank: 27, name: 'Prophecy', trades: 504 },{ rank: 28, name: '04doolant', trades: 504 },
+  { rank: 29, name: 'BlueChedow', trades: 492 },{ rank: 30, name: 'Heartflower', trades: 486 }
 ];
 
 const YATA_CACHE_MINUTES = 5;
-const INVENTORY_CACHE_MINUTES = 5;
-
-// Plushie set: 13 items required for the museum
-const PLUSHIE_IDS = ['186', '215', '187', '261', '618', '258', '273', '269', '266', '268', '281', '274', '384'];
-
-// Exotic flower set: 11 items required for the museum
-const FLOWER_IDS = ['260', '617', '263', '272', '264', '271', '267', '277', '282', '276', '385'];
+const PLUSHIE_IDS = ['186','215','187','261','618','258','273','269','266','268','281','274','384'];
+const FLOWER_IDS  = ['260','617','263','272','264','271','267','277','282','276','385'];
 
 let state = {
   settings: { tzOffset: -7, travelMethod: 0.7, apiKey: '', binId: '', binKey: '', paidSlots: 19, flowerSlots: 5 },
-  yataData: null, yataFetchedAt: null,
-  // Price memory: { 'Country|itemId': { country, itemId, name, cost, lastSeenAt, lastSeenStock } }
-  // Updated every YATA refresh — remembers the most recent observed buy price for things we've seen in stock.
-  priceMemory: {},
+  yataData: null, yataFetchedAt: null, priceMemory: {},
   itemsData: null, itemsFetchedAt: null,
-  // Shared data:
-  traders: [],
-  shitlist: [],
-  inventory: {}, // { hunka: { items: {id: qty}, owner: 'Hunka', updatedAt: '...' }, plybur: {...} }
-  logbook: [],
-  lastSynced: null,
-  // Per-session status (not persisted):
-  statusByTornId: {},
-  statusCheckedAt: null,
-  // My identity (auto-detected from API key)
-  myKey: null,
-  myName: null,
-  // Edit state (per-session)
-  editingTraderId: null,
-  editingShitId: null
+  traders: [], shitlist: [], inventory: {}, logbook: [], lastSynced: null,
+  statusByTornId: {}, statusCheckedAt: null,
+  myKey: null, myName: null, editingTraderId: null, editingShitId: null
 };
 
-function load() {
-  try {
-    const saved = localStorage.getItem('tornTracker');
-    if (saved) state = { ...state, ...JSON.parse(saved) };
-  } catch(e) { console.error(e); }
-}
-function save() {
-  try { localStorage.setItem('tornTracker', JSON.stringify(state)); } catch(e) { console.error(e); }
-}
-
-function toast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
-}
-
+function load() { try { const s = localStorage.getItem('tornTracker'); if (s) state = {...state,...JSON.parse(s)}; } catch(e){} }
+function save() { try { localStorage.setItem('tornTracker', JSON.stringify(state)); } catch(e){} }
+function toast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
 function fmt(n) { return new Intl.NumberFormat().format(n); }
-
-// Convert a number of minutes into a "Xh Ym" or "Ym" string.
-function formatDuration(totalMinutes) {
-  const total = Math.max(0, Math.round(totalMinutes));
-  if (total < 60) return `${total}m`;
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+function formatDuration(m) { m=Math.max(0,Math.round(m)); if(m<60) return m+'m'; const h=Math.floor(m/60),r=m%60; return r===0?h+'h':h+'h '+r+'m'; }
+function formatClockTime(d) { return d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',timeZoneName:'short'}); }
+function ageSinceUnix(u) {
+  if(!u) return {text:'?',cls:'stale'};
+  const s=Math.floor(Date.now()/1000)-u;
+  if(s<0) return {text:'just now',cls:'fresh'};
+  if(s<60) return {text:s+'s ago',cls:'fresh'};
+  if(s<3600) return {text:Math.round(s/60)+'m ago',cls:s<600?'fresh':'mid'};
+  if(s<86400) return {text:Math.round(s/3600)+'h ago',cls:'stale'};
+  return {text:Math.round(s/86400)+'d ago',cls:'stale'};
 }
 
-// Format a Date as a local-time clock string with timezone abbrev (e.g., "3:42 PM PDT").
-function formatClockTime(date) {
-  const opts = { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' };
-  return date.toLocaleTimeString(undefined, opts);
-}
-
-// Convert a unix-seconds timestamp into a human-friendly age string + class.
-// Used for the per-country YATA freshness indicator in Live Stock.
-function ageSinceUnix(unixSeconds) {
-  if (!unixSeconds) return { text: '?', cls: 'stale' };
-  const ageSec = Math.floor(Date.now() / 1000) - unixSeconds;
-  let text, cls;
-  if (ageSec < 0)            { text = 'just now';          cls = 'fresh'; }
-  else if (ageSec < 60)      { text = ageSec + 's ago';    cls = 'fresh'; }
-  else if (ageSec < 3600)    { text = Math.round(ageSec / 60) + 'm ago';   cls = ageSec < 600 ? 'fresh' : 'mid'; }
-  else if (ageSec < 86400)   { text = Math.round(ageSec / 3600) + 'h ago'; cls = 'stale'; }
-  else                       { text = Math.round(ageSec / 86400) + 'd ago'; cls = 'stale'; }
-  return { text, cls };
-}
-
-// ============ TRIP PLANNER ============
-// Active country shown in the trip planner panel above the Live Stock table
-let plannedCountry = null;
-
-function setPlannedCountry(country) {
-  plannedCountry = (plannedCountry === country) ? null : country;
-  renderTripPlanner();
-}
-
-// Greedy fill: take the cheapest stock-limited slots from a sorted list of items.
-// Items must be sorted by desired priority (best first). Returns an array of
-// { itemId, name, qty, buyEach, sellEach, profitEach, totalBuy, totalSell, totalProfit }.
-function greedyFill(items, slots) {
-  const picks = [];
-  let slotsLeft = slots;
-  for (const it of items) {
-    if (slotsLeft <= 0) break;
-    const take = Math.min(it.stock, slotsLeft);
-    if (take <= 0) continue;
-    const profitEach = it.marketValue - it.cost;
-    picks.push({
-      itemId: it.itemId,
-      name: it.itemName,
-      qty: take,
-      buyEach: it.cost,
-      sellEach: it.marketValue,
-      profitEach,
-      totalBuy: take * it.cost,
-      totalSell: take * it.marketValue,
-      totalProfit: take * profitEach
-    });
-    slotsLeft -= take;
-  }
-  return { picks, slotsUnfilled: slotsLeft };
-}
-
-function planTrip(country) {
-  // Get all rows for this country from the existing parsed data
-  const allRows = extractStockRows().filter(r => r.country === country && r.stock > 0);
-  if (allRows.length === 0) return null;
-
-  const flowerIdSet = new Set(FLOWER_IDS);
-  const sortByProfit = (a, b) => (b.marketValue - b.cost) - (a.marketValue - a.cost);
-
-  // Pull configured capacity from settings
-  const flowerSlots = state.settings.flowerSlots != null ? state.settings.flowerSlots : 5;
-  const paidSlots = state.settings.paidSlots || 19;
-
-  // First, fill flower-only slots from flowers (greedy by profit)
-  const flowers = allRows.filter(r => flowerIdSet.has(r.itemId)).sort(sortByProfit);
-  const flowerFill = greedyFill(flowers, flowerSlots);
-
-  // For paid slots: anything (including flowers), but reduce flower stock by what we already took
-  const flowerTakenById = {};
-  for (const p of flowerFill.picks) {
-    flowerTakenById[p.itemId] = (flowerTakenById[p.itemId] || 0) + p.qty;
-  }
-  const remainingItems = allRows
-    .map(r => {
-      const taken = flowerTakenById[r.itemId] || 0;
-      return { ...r, stock: r.stock - taken };
-    })
-    .filter(r => r.stock > 0)
-    .sort(sortByProfit);
-  const otherFill = greedyFill(remainingItems, paidSlots);
-
-  // Travel time
-  const dest = DESTINATIONS.find(d => d.name === country);
-  const travelMin = dest ? Math.round(dest.standardMin * state.settings.travelMethod) : 0;
-  const roundTripMin = travelMin * 2;
-
-  const sampleRow = allRows[0];
-
-  const totalBuy = [...flowerFill.picks, ...otherFill.picks].reduce((s, p) => s + p.totalBuy, 0);
-  const totalSell = [...flowerFill.picks, ...otherFill.picks].reduce((s, p) => s + p.totalSell, 0);
-  const totalProfit = totalSell - totalBuy;
-  const profitPerHour = roundTripMin > 0 ? Math.round(totalProfit / (roundTripMin / 60)) : 0;
-  const hasMarketData = state.itemsData !== null;
-
-  return {
-    country,
-    travelMin,
-    roundTripMin,
-    freshnessTs: sampleRow.countryUpdateTs,
-    flowerFill,
-    otherFill,
-    flowerSlots,
-    paidSlots,
-    totalBuy,
-    totalSell,
-    totalProfit,
-    profitPerHour,
-    hasMarketData
-  };
-}
-
-function computeWhatIfProjections(country, currentTrip) {
-  // Look up priceMemory entries for this country whose items are NOT currently in stock.
-  // For each, project what they'd add if they were stocked (using slot constraints).
-  const flowerIdSet = new Set(FLOWER_IDS);
-  const memory = state.priceMemory || {};
-  const itemsInStockNow = new Set(extractStockRows().filter(r => r.country === country && r.stock > 0).map(r => r.itemId));
-  const cutoffMs = 30 * 24 * 60 * 60 * 1000; // 30 days
-  const now = Date.now();
-
-  const candidates = [];
-  for (const key in memory) {
-    const m = memory[key];
-    if (m.country !== country) continue;
-    if (itemsInStockNow.has(m.itemId)) continue; // it's actually in stock right now, skip
-    if (!m.lastSeenAt || now - m.lastSeenAt > cutoffMs) continue;
-
-    // Look up market value
-    const itemInfo = (state.itemsData && state.itemsData[m.itemId]) || {};
-    const marketValue = itemInfo.market_value || 0;
-    if (!marketValue) continue; // can't project profit without market data
-
-    const isFlower = flowerIdSet.has(m.itemId);
-    const flowerSlots = state.settings.flowerSlots != null ? state.settings.flowerSlots : 5;
-    const paidSlots = state.settings.paidSlots || 19;
-    const slots = isFlower ? flowerSlots : paidSlots;
-    const profitEach = marketValue - m.cost;
-
-    candidates.push({
-      itemId: m.itemId,
-      name: m.name || (itemInfo.name) || `Item #${m.itemId}`,
-      cost: m.cost,
-      marketValue,
-      profitEach,
-      lastSeenAt: m.lastSeenAt,
-      lastSeenStock: m.lastSeenStock,
-      isFlower,
-      slots,
-      cashIfFilled: slots * m.cost,
-      revenueIfFilled: slots * marketValue,
-      profitIfFilled: slots * profitEach
-    });
-  }
-
-  // Sort by profit potential, descending
-  candidates.sort((a, b) => b.profitIfFilled - a.profitIfFilled);
-  return candidates;
-}
-
-function renderTripPlanner() {
-  const container = document.getElementById('trip-planner');
-  if (!container) return;
-  if (!plannedCountry) {
-    container.innerHTML = '';
-    return;
-  }
-  const trip = planTrip(plannedCountry);
-  if (!trip) {
-    const projections = computeWhatIfProjections(plannedCountry, null);
-    const projectionsHtml = projections.length === 0 ? '' : `
-      <div class="trip-section" style="margin-top:14px">
-        <h4>If these were in stock — based on prices we've seen before</h4>
-        <table>
-          <thead><tr><th>Item</th><th class="num">Last seen</th><th class="num">Buy each</th><th class="num">Profit each</th><th class="num">If full: cash</th><th class="num">If full: profit</th></tr></thead>
-          <tbody>${projections.map(p => {
-            const a = ageSinceUnix(Math.floor(p.lastSeenAt / 1000));
-            return `<tr>
-              <td>${escapeHtml(p.name)}${p.isFlower ? ' <span class="hint">(flower)</span>' : ''}</td>
-              <td class="num">${a.text}</td>
-              <td class="num">$${fmt(p.cost)}</td>
-              <td class="num">$${fmt(p.profitEach)}</td>
-              <td class="num">$${fmt(p.cashIfFilled)}</td>
-              <td class="num" style="color:#27500A">$${fmt(p.profitIfFilled)}</td>
-            </tr>`;
-          }).join('')}</tbody>
-        </table>
-      </div>`;
-    container.innerHTML = `<div class="trip-panel">
-      <h3>${plannedCountry} <button class="trip-close" onclick="setPlannedCountry(null)">close ✕</button></h3>
-      <div class="trip-warning">No items in stock here right now (or YATA hasn't seen this country recently).</div>
-      ${projectionsHtml}
-    </div>`;
-    return;
-  }
-
-  const age = ageSinceUnix(trip.freshnessTs);
-  const flowerRows = trip.flowerFill.picks;
-  const otherRows = trip.otherFill.picks;
-
-  const renderPicksTable = (picks, title, slotsRequested, slotsUnfilled) => {
-    if (picks.length === 0) {
-      return `<div class="trip-section"><h4>${title}</h4><div class="hint">No items available — ${slotsRequested} slots unfilled</div></div>`;
-    }
-    const filled = picks.reduce((s, p) => s + p.qty, 0);
-    const totalProfit = picks.reduce((s, p) => s + p.totalProfit, 0);
-    const totalBuy = picks.reduce((s, p) => s + p.totalBuy, 0);
-    const unfilledNote = slotsUnfilled > 0
-      ? `<div class="hint" style="color:#BA7517;margin-top:4px">${slotsUnfilled} slot${slotsUnfilled !== 1 ? 's' : ''} unfilled (not enough stock)</div>`
-      : '';
-    return `<div class="trip-section">
-      <h4>${title} — ${filled}/${slotsRequested} slots filled</h4>
-      <table>
-        <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Buy each</th><th class="num">Sell each</th><th class="num">Profit each</th><th class="num">Subtotal cost</th><th class="num">Subtotal profit</th></tr></thead>
-        <tbody>${picks.map(p => `<tr>
-          <td>${escapeHtml(p.name)}</td>
-          <td class="num">${p.qty}</td>
-          <td class="num">$${fmt(p.buyEach)}</td>
-          <td class="num">$${fmt(p.sellEach)}</td>
-          <td class="num">$${fmt(p.profitEach)}</td>
-          <td class="num">$${fmt(p.totalBuy)}</td>
-          <td class="num">$${fmt(p.totalProfit)}</td>
-        </tr>`).join('')}</tbody>
-      </table>
-      ${unfilledNote}
-    </div>`;
-  };
-
-  const noMarketWarning = !trip.hasMarketData
-    ? `<div class="trip-warning">Add a Torn API key in Settings to see profit calculations. Right now we're picking by stock availability only.</div>`
-    : '';
-
-  // Arrival and return times if you fly now
-  const now = new Date();
-  const arriveAt = new Date(now.getTime() + trip.travelMin * 60000);
-  const returnAt = new Date(now.getTime() + trip.roundTripMin * 60000);
-
-  container.innerHTML = `<div class="trip-panel">
-    <h3>
-      <span>Trip plan — ${trip.country}
-        <span class="freshness ${age.cls}" style="margin-left:8px">data ${age.text}</span>
-        <span class="hint" style="margin-left:8px">${formatDuration(trip.roundTripMin)} round trip</span>
-      </span>
-      <button class="trip-close" onclick="setPlannedCountry(null)">close ✕</button>
-    </h3>
-    <div class="hint" style="margin-top:-8px;margin-bottom:12px">
-      If you fly now: arrive at <strong>${formatClockTime(arriveAt)}</strong>, return at <strong>${formatClockTime(returnAt)}</strong>
-    </div>
-
-    ${noMarketWarning}
-
-    ${renderPicksTable(flowerRows, `${trip.flowerSlots} flower slot${trip.flowerSlots !== 1 ? 's' : ''}`, trip.flowerSlots, trip.flowerFill.slotsUnfilled)}
-    ${renderPicksTable(otherRows, `${trip.paidSlots} paid slot${trip.paidSlots !== 1 ? 's' : ''}`, trip.paidSlots, trip.otherFill.slotsUnfilled)}
-
-    ${(() => {
-      const projections = computeWhatIfProjections(trip.country, trip);
-      if (projections.length === 0) return '';
-      const ageText = (ts) => {
-        const a = ageSinceUnix(Math.floor(ts / 1000));
-        return a.text;
-      };
-      return `<div class="trip-section">
-        <h4>If these were in stock — based on prices we've seen before</h4>
-        <div class="hint" style="margin-bottom:6px">Items not currently stocked but observed in this country recently. Projection assumes a full slot allocation (${state.settings.flowerSlots != null ? state.settings.flowerSlots : 5} for flowers, ${state.settings.paidSlots || 19} for others) at the last-seen price.</div>
-        <table>
-          <thead><tr><th>Item</th><th class="num">Last seen</th><th class="num">Buy each</th><th class="num">Profit each</th><th class="num">If full: cash</th><th class="num">If full: profit</th></tr></thead>
-          <tbody>${projections.map(p => `<tr>
-            <td>${escapeHtml(p.name)}${p.isFlower ? ' <span class="hint">(flower)</span>' : ''}</td>
-            <td class="num">${ageText(p.lastSeenAt)}</td>
-            <td class="num">$${fmt(p.cost)}</td>
-            <td class="num">$${fmt(p.profitEach)}</td>
-            <td class="num">$${fmt(p.cashIfFilled)}</td>
-            <td class="num" style="color:#27500A">$${fmt(p.profitIfFilled)}</td>
-          </tr>`).join('')}</tbody>
-        </table>
-      </div>`;
-    })()}
-
-    <div class="trip-totals">
-      <div class="stat-card"><div class="stat-label">Cash to bring</div><div class="stat-value num cost">$${fmt(trip.totalBuy)}</div></div>
-      <div class="stat-card"><div class="stat-label">Expected revenue</div><div class="stat-value num">$${fmt(trip.totalSell)}</div></div>
-      <div class="stat-card"><div class="stat-label">Expected profit</div><div class="stat-value num profit">$${fmt(trip.totalProfit)}</div></div>
-      <div class="stat-card"><div class="stat-label">$/hr</div><div class="stat-value num">$${fmt(trip.profitPerHour)}</div></div>
-    </div>
-  </div>`;
-}
-
-// ============ SORT STATE (per-session) ============
-const sortState = {
-  live: { col: 'profitPerHour', dir: 'desc' },
-  traders: { col: 'name', dir: 'asc' },
-  shitlist: { col: 'date', dir: 'desc' },
-  te: { col: 'rank', dir: 'asc' },
-  plushies: { col: 'name', dir: 'asc' },
-  flowers: { col: 'name', dir: 'asc' }
-};
-
-function toggleSort(table, col) {
-  const s = sortState[table];
-  if (s.col === col) {
-    s.dir = s.dir === 'asc' ? 'desc' : 'asc';
-  } else {
-    s.col = col;
-    // Default direction by data type
-    s.dir = (col === 'name' || col === 'item' || col === 'country' || col === 'what' || col === 'tags' || col === 'buys' || col === 'note' || col === 'source') ? 'asc' : 'desc';
-  }
-  // Re-render the affected table
-  if (table === 'live') renderLiveStock();
-  else if (table === 'traders') renderTraders();
-  else if (table === 'shitlist') renderShitList();
-  else if (table === 'te') renderTeTop();
-  else if (table === 'plushies') renderCollectionTable('plushies-table-container', 'plushies-summary', PLUSHIE_IDS, 'Plushies');
-  else if (table === 'flowers') renderCollectionTable('flowers-table-container', 'flowers-summary', FLOWER_IDS, 'Flowers');
-}
-
-function compareValues(a, b, dir) {
-  // null/undefined sort to bottom regardless of direction
-  if (a == null && b == null) return 0;
-  if (a == null) return 1;
-  if (b == null) return -1;
-  let result;
-  if (typeof a === 'number' && typeof b === 'number') result = a - b;
-  else result = String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
-  return dir === 'asc' ? result : -result;
-}
-
-function thHtml(table, col, label, isNum) {
-  const s = sortState[table];
-  let cls = 'sortable';
-  if (s.col === col) cls += s.dir === 'asc' ? ' sort-asc' : ' sort-desc';
-  return `<th class="${cls}${isNum ? ' num' : ''}" onclick="toggleSort('${table}', '${col}')">${label}</th>`;
-}
-
-// ============ TORN API HELPERS ============
-function parseTornUrl(url) {
-  // Matches profiles.php?XID=12345 or similar
-  const m = (url || '').match(/XID=(\d+)/i) || (url || '').match(/[?&]ID=(\d+)/i);
-  return m ? m[1] : null;
-}
-
-async function lookupTornUser(tornId) {
-  if (!state.settings.apiKey) {
-    throw new Error('Torn API key not set. Go to Settings.');
-  }
-  const resp = await fetch(`https://api.torn.com/user/${tornId}?selections=basic&key=${state.settings.apiKey}`);
-  const data = await resp.json();
-  if (data.error) throw new Error(`Torn API: ${data.error.error}`);
-  return { id: tornId, name: data.name, level: data.level };
-}
-
-async function fetchTornStatus(tornId) {
-  if (!state.settings.apiKey) throw new Error('Torn API key not set');
-  const resp = await fetch(`https://api.torn.com/user/${tornId}?selections=basic&key=${state.settings.apiKey}`);
-  const data = await resp.json();
-  if (data.error) throw new Error(data.error.error);
-  return {
-    lastActionStatus: data.last_action && data.last_action.status,
-    lastActionRelative: data.last_action && data.last_action.relative,
-    lastActionTimestamp: data.last_action && data.last_action.timestamp,
-    state: data.status && data.status.state,
-    stateDescription: data.status && data.status.description
-  };
-}
-
-async function detectMyIdentity() {
-  if (!state.settings.apiKey) return null;
-  if (state.myKey && state.myName) return { key: state.myKey, name: state.myName };
-  try {
-    const resp = await fetch(`https://api.torn.com/user/?selections=basic&key=${state.settings.apiKey}`);
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error.error);
-    state.myName = data.name;
-    state.myKey = data.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    return { key: state.myKey, name: state.myName };
-  } catch(e) {
-    console.error('Identity detection failed:', e);
-    return null;
-  }
-}
-
-// Debounced save for collection edits
-let collectionSaveTimer = null;
-async function queueCollectionSave() {
-  if (collectionSaveTimer) clearTimeout(collectionSaveTimer);
-  collectionSaveTimer = setTimeout(async () => {
-    save();
-    if (state.settings.binId && state.settings.binKey) {
-      await syncPush();
-      const indicator = document.getElementById('inv-status');
-      if (indicator) indicator.textContent = 'Saved · synced just now';
-    }
-  }, 2000);
-}
-
-async function setMyItemCount(itemId, count) {
-  // Make sure we know who we are
-  let me = state.myKey ? { key: state.myKey, name: state.myName } : await detectMyIdentity();
-  if (!me) {
-    toast('Set your Torn API key in Settings first');
-    return;
-  }
-  if (!state.inventory[me.key]) {
-    state.inventory[me.key] = { owner: me.name, items: {}, updatedAt: new Date().toISOString() };
-  }
-  const c = Math.max(0, parseInt(count) || 0);
-  if (c === 0) {
-    delete state.inventory[me.key].items[itemId];
-  } else {
-    state.inventory[me.key].items[itemId] = c;
-  }
-  state.inventory[me.key].updatedAt = new Date().toISOString();
-
-  const indicator = document.getElementById('inv-status');
-  if (indicator) indicator.textContent = 'Editing... (autosaves in 2s)';
-
-  queueCollectionSave();
-
-  // Re-render summary line at top of section without rebuilding inputs (would lose focus)
-  updateCollectionSummaries();
-}
-
-function updateCollectionSummaries() {
-  const ownerKeys = Object.keys(state.inventory);
-  ['plushies-summary', 'flowers-summary'].forEach(sumId => {
-    const summary = document.getElementById(sumId);
-    if (!summary) return;
-    const itemIds = sumId === 'plushies-summary' ? PLUSHIE_IDS : FLOWER_IDS;
-    if (ownerKeys.length === 0) {
-      summary.textContent = '— no entries yet';
-      return;
-    }
-    const parts = ownerKeys.map(k => {
-      const inv = state.inventory[k];
-      const count = itemIds.filter(id => inv.items && inv.items[id] > 0).length;
-      return `${inv.owner}: ${count}/${itemIds.length}`;
-    });
-    summary.textContent = '— ' + parts.join(' · ');
-  });
-}
-
-async function loadItemNames() {
-  // Just ensures torn/items is fetched so we have names
-  if (!state.settings.apiKey) {
-    toast('Set your Torn API key in Settings first');
-    return;
-  }
-  const btn = document.getElementById('refresh-inv-btn');
-  if (btn) { btn.textContent = 'Loading names...'; btn.disabled = true; }
-  await fetchTornItems();
-  await detectMyIdentity();
-  renderCollections();
-  if (btn) { btn.textContent = 'Reload item names'; btn.disabled = false; }
-  toast('Item names loaded');
-}
-
-function getCountryForItem(itemId) {
-  // Try to find this item in YATA stock data to determine which country sells it
-  if (!state.yataData) return null;
-  let stocksRoot = state.yataData.stocks || state.yataData;
-  for (const countryKey in stocksRoot) {
-    const entry = stocksRoot[countryKey];
-    if (!entry || typeof entry !== 'object') continue;
-    const dest = findDestination(countryKey);
-    if (!dest) continue;
-    let itemSource = entry.stocks || entry.items || entry;
-    if (!itemSource || typeof itemSource !== 'object') continue;
-    if (Array.isArray(itemSource)) {
-      for (const it of itemSource) {
-        if (String(it.id) === String(itemId)) return { country: dest.name, stock: it.quantity || 0, cost: it.cost || 0 };
-      }
-    } else if (itemSource[itemId]) {
-      const it = itemSource[itemId];
-      return { country: dest.name, stock: it.quantity !== undefined ? it.quantity : (it.stock || 0), cost: it.cost || 0 };
-    }
-  }
-  return null;
-}
-
-function renderCollectionTable(containerId, summaryId, itemIds, label) {
-  const container = document.getElementById(containerId);
-  const summary = document.getElementById(summaryId);
-  if (!container) return;
-
-  if (!state.itemsData) {
-    container.innerHTML = `<div class="empty-state">Item names not loaded yet. Click "Reload item names" above.</div>`;
-    if (summary) summary.textContent = '';
-    return;
-  }
-
-  // Make sure I'm in the inventory list (with possibly empty items) so my column always shows
-  const me = state.myKey ? { key: state.myKey, name: state.myName } : null;
-  if (me && !state.inventory[me.key]) {
-    state.inventory[me.key] = { owner: me.name, items: {}, updatedAt: new Date().toISOString() };
-  }
-
-  // Owners — me first if known, then everyone else
-  let ownerKeys = Object.keys(state.inventory);
-  if (me) {
-    ownerKeys = [me.key, ...ownerKeys.filter(k => k !== me.key)];
-  }
-  const ownerLabels = ownerKeys.map(k => state.inventory[k].owner || k);
-
-  // Build rows
-  const rows = itemIds.map(id => {
-    const itemInfo = state.itemsData[id] || {};
-    const name = itemInfo.name || `Item #${id}`;
-    const marketValue = itemInfo.market_value || 0;
-    const ownerCounts = ownerKeys.map(k => (state.inventory[k].items && state.inventory[k].items[id]) || 0);
-    const sourceInfo = getCountryForItem(id);
-    return { id, name, marketValue, ownerCounts, sourceInfo };
-  });
-
-  if (ownerKeys.length === 0) {
-    container.innerHTML = `<div class="empty-state">Set your Torn API key in Settings, then come back. The tool needs to know who you are to track your column.</div>`;
-    return;
-  }
-
-  container.innerHTML = `<table>
-    <thead><tr>
-      <th>Item</th>
-      ${ownerLabels.map((l, i) => {
-        const isMe = me && ownerKeys[i] === me.key;
-        return `<th class="num">${escapeHtml(l)}${isMe ? ' (you)' : ''}</th>`;
-      }).join('')}
-      <th class="num">Market value</th>
-      <th>Available now</th>
-    </tr></thead>
-    <tbody>${rows.map(r => {
-      const stockHint = r.sourceInfo
-        ? (r.sourceInfo.stock > 0
-          ? `<span class="stock-good">${fmt(r.sourceInfo.stock)} in ${r.sourceInfo.country} @ $${fmt(r.sourceInfo.cost)}</span>`
-          : `<span class="stock-empty">Out in ${r.sourceInfo.country}</span>`)
-        : '<span style="color:#888780">—</span>';
-      return `<tr>
-        <td>${escapeHtml(r.name)}</td>
-        ${r.ownerCounts.map((c, i) => {
-          const isMe = me && ownerKeys[i] === me.key;
-          if (isMe) {
-            return `<td class="num"><input type="number" min="0" value="${c}" style="width:60px;padding:4px 6px;text-align:center" onchange="setMyItemCount('${r.id}', this.value)" /></td>`;
-          } else {
-            return `<td class="num">${c > 0 ? `<span class="stock-good">${c}</span>` : '<span style="color:#888780">—</span>'}</td>`;
-          }
-        }).join('')}
-        <td class="num">${r.marketValue ? '$' + fmt(r.marketValue) : '—'}</td>
-        <td>${stockHint}</td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
-
-  updateCollectionSummaries();
-}
-
-function renderCollections() {
-  // Show/hide unconfigured banner
-  const unconfigured = document.getElementById('collections-unconfigured');
-  if (unconfigured) unconfigured.style.display = state.settings.apiKey ? 'none' : 'block';
-
-  // Make sure I have an entry so my column always shows after first load
-  if (state.settings.apiKey && !state.myKey) {
-    detectMyIdentity().then(() => {
-      renderCollectionTable('plushies-table-container', 'plushies-summary', PLUSHIE_IDS, 'Plushies');
-      renderCollectionTable('flowers-table-container', 'flowers-summary', FLOWER_IDS, 'Flowers');
-    });
-  }
-
-  renderCollectionTable('plushies-table-container', 'plushies-summary', PLUSHIE_IDS, 'Plushies');
-  renderCollectionTable('flowers-table-container', 'flowers-summary', FLOWER_IDS, 'Flowers');
-
-  // Auto-load item names if missing and we have a key
-  if (state.settings.apiKey && !state.itemsData) {
-    fetchTornItems().then(() => {
-      renderCollectionTable('plushies-table-container', 'plushies-summary', PLUSHIE_IDS, 'Plushies');
-      renderCollectionTable('flowers-table-container', 'flowers-summary', FLOWER_IDS, 'Flowers');
-    });
-  }
-}
-
-// ============ LOGBOOK ============
-
-async function fetchMyLocation() {
-  if (!state.settings.apiKey) return null;
-  try {
-    const resp = await fetch(`https://api.torn.com/user/?selections=basic&key=${state.settings.apiKey}`);
-    const data = await resp.json();
-    if (data.error) return null;
-    const s = data.status || {};
-    return {
-      state: s.state || null,
-      description: s.description || null,
-      until: s.until || null
-    };
-  } catch(e) {
-    return null;
-  }
-}
-
-function formatLocation(loc) {
-  if (!loc || !loc.state) return '(unknown)';
-  // Examples: state="Okay", state="Traveling", state="Abroad", state="Hospital", state="Jail"
-  // description often like "In Mexico" or "Returning to Torn from Mexico" or "Traveling to Mexico" or "In hospital for X mins"
-  const desc = loc.description || loc.state;
-  let icon = '📍';
-  if (loc.state === 'Traveling') icon = '✈️';
-  else if (loc.state === 'Abroad') icon = '🌍';
-  else if (loc.state === 'Hospital') icon = '🏥';
-  else if (loc.state === 'Jail') icon = '🔒';
-  else if (loc.state === 'Federal') icon = '⛓️';
-  else if (loc.state === 'Okay') icon = '🌆';
-  return `${icon} ${desc}`;
-}
-
-async function saveLogEntry() {
-  const text = document.getElementById('logbook-text').value.trim();
-  if (!text) { toast('Write something first'); return; }
-
-  const btn = document.getElementById('save-log-btn');
-  btn.textContent = 'Saving...';
-  btn.disabled = true;
-
-  try {
-    let me = state.myKey ? { key: state.myKey, name: state.myName } : await detectMyIdentity();
-    if (!me) {
-      // Allow saving without identity but mark as anonymous
-      me = { key: 'unknown', name: 'Unknown' };
-    }
-    const loc = state.settings.apiKey ? await fetchMyLocation() : null;
-
-    state.logbook.push({
-      id: Date.now(),
-      authorKey: me.key,
-      authorName: me.name,
-      text,
-      location: loc,
-      timestamp: new Date().toISOString(),
-      editedAt: null
-    });
-    save();
-    if (state.settings.binId && state.settings.binKey) await syncPush();
-
-    document.getElementById('logbook-text').value = '';
-    renderLogbook();
-    toast('Entry saved');
-  } catch(e) {
-    console.error(e);
-    toast('Save failed: ' + e.message);
-  }
-  btn.textContent = 'Save entry';
-  btn.disabled = false;
-}
-
-async function deleteLogEntry(id) {
-  if (!confirm('Delete this entry?')) return;
-  state.logbook = state.logbook.filter(e => e.id !== id);
-  save();
-  if (state.settings.binId && state.settings.binKey) await syncPush();
-  renderLogbook();
-  toast('Removed');
-}
-
-function startEditLog(id) {
-  const entry = state.logbook.find(e => e.id === id);
-  if (!entry) return;
-  // Switch this entry's DOM into edit mode
-  const el = document.getElementById('log-entry-' + id);
-  if (!el) return;
-  el.querySelector('.log-text').style.display = 'none';
-  el.querySelector('.log-actions').style.display = 'none';
-
-  const editArea = document.createElement('div');
-  editArea.className = 'log-edit-area';
-  editArea.innerHTML = `
-    <textarea id="log-edit-${id}">${escapeHtml(entry.text)}</textarea>
-    <div style="margin-top:8px;display:flex;gap:8px">
-      <button onclick="commitEditLog(${id})">Save</button>
-      <button class="secondary" onclick="cancelEditLog(${id})">Cancel</button>
-    </div>
-  `;
-  el.appendChild(editArea);
-  document.getElementById('log-edit-' + id).focus();
-}
-
-async function commitEditLog(id) {
-  const entry = state.logbook.find(e => e.id === id);
-  if (!entry) return;
-  const newText = document.getElementById('log-edit-' + id).value.trim();
-  if (!newText) { toast('Entry cannot be empty'); return; }
-  entry.text = newText;
-  entry.editedAt = new Date().toISOString();
-  save();
-  if (state.settings.binId && state.settings.binKey) await syncPush();
-  renderLogbook();
-  toast('Updated');
-}
-
-function cancelEditLog(id) {
-  renderLogbook();
-}
-
-function renderLogbook() {
-  const unconfigured = document.getElementById('logbook-unconfigured');
-  if (unconfigured) unconfigured.style.display = state.settings.apiKey ? 'none' : 'block';
-
-  const container = document.getElementById('logbook-entries');
-  if (!container) return;
-  if (state.logbook.length === 0) {
-    container.innerHTML = '<div class="empty-state">No entries yet. Write the first one above.</div>';
-    return;
-  }
-  // Sort newest first
-  const entries = [...state.logbook].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  const myKey = state.myKey;
-
-  container.innerHTML = entries.map(e => {
-    const isMine = e.authorKey === myKey;
-    const cls = isMine ? 'mine' : 'theirs';
-    const when = new Date(e.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const editedNote = e.editedAt
-      ? `<span class="log-edited">edited ${new Date(e.editedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>`
-      : '';
-    const locText = formatLocation(e.location);
-    return `<div class="log-entry ${cls}" id="log-entry-${e.id}">
-      <div class="log-meta">
-        <span class="log-author">${escapeHtml(e.authorName)}${isMine ? ' (you)' : ''}</span>
-        <span class="log-when">${when}${editedNote}</span>
-      </div>
-      <div class="log-location">${locText}</div>
-      <div class="log-text">${escapeHtml(e.text)}</div>
-      ${isMine ? `<div class="log-actions">
-        <button class="secondary" onclick="startEditLog(${e.id})">Edit</button>
-        <button class="danger" onclick="deleteLogEntry(${e.id})">Delete</button>
-      </div>` : ''}
-    </div>`;
+// ===== RESTOCK TIMER =====
+let restockTimerOpen = false;
+
+function populateRestockCountries() {
+  const sel = document.getElementById('rt-country');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = DESTINATIONS.map(d => {
+    const mins = Math.round(d.standardMin * (state.settings.travelMethod || 0.7));
+    const sel2 = d.name === (prev || 'Argentina') ? ' selected' : '';
+    return `<option value="${d.name}"${sel2}>${d.name} (${formatDuration(mins)})</option>`;
   }).join('');
 }
 
-async function checkAllStatus() {
-  if (!state.settings.apiKey) {
-    toast('Torn API key required. Set it in Settings.');
-    return;
-  }
-  if (state.traders.length === 0) {
-    toast('No traders to check');
-    return;
-  }
-  const btn = document.getElementById('check-status-btn');
-  btn.textContent = 'Checking...';
-  btn.disabled = true;
-
-  // Mark all as loading
-  state.traders.forEach(t => {
-    state.statusByTornId[t.tornId] = { loading: true };
-  });
-  renderTraders();
-
-  // Fetch in parallel
-  const results = await Promise.allSettled(
-    state.traders.map(t => fetchTornStatus(t.tornId).then(s => ({ tornId: t.tornId, status: s })))
-  );
-
-  results.forEach((r, i) => {
-    const tornId = state.traders[i].tornId;
-    if (r.status === 'fulfilled') {
-      state.statusByTornId[tornId] = r.value.status;
-    } else {
-      state.statusByTornId[tornId] = { error: r.reason.message || 'Failed' };
-    }
-  });
-
-  state.statusCheckedAt = new Date().toISOString();
-  renderTraders();
-  updateStatusCheckedLabel();
-  btn.textContent = 'Check status';
-  btn.disabled = false;
-
-  const failed = results.filter(r => r.status === 'rejected').length;
-  if (failed > 0) {
-    toast(`Checked ${results.length - failed}/${results.length} (${failed} failed)`);
-  } else {
-    toast(`Checked ${results.length} trader${results.length !== 1 ? 's' : ''}`);
-  }
+function toggleRestockTimer() {
+  restockTimerOpen = !restockTimerOpen;
+  const panel = document.getElementById('restock-timer-panel');
+  const btn = document.getElementById('restock-timer-btn');
+  panel.style.display = restockTimerOpen ? 'block' : 'none';
+  btn.textContent = restockTimerOpen ? '\u2715 Close timer' : '\u23f1 Restock timer';
+  if (restockTimerOpen) { populateRestockCountries(); calcRestock(); }
 }
 
-function updateStatusCheckedLabel() {
-  const el = document.getElementById('status-checked-at');
-  if (!el) return;
-  if (!state.statusCheckedAt) {
-    el.textContent = 'Status not checked yet';
-    return;
-  }
-  const ageSec = Math.round((Date.now() - new Date(state.statusCheckedAt)) / 1000);
-  const ageText = ageSec < 60 ? `${ageSec}s ago` : `${Math.round(ageSec / 60)}m ago`;
-  el.textContent = `Status checked ${ageText}`;
+function toAmPm(mins) {
+  const h = Math.floor(mins/60)%24, m = mins%60;
+  const ap = h<12?'am':'pm', h12 = h%12||12;
+  return h12+':'+(m<10?'0':'')+m+' '+ap;
 }
 
-function renderStatusCell(tornId) {
-  const s = state.statusByTornId[tornId];
-  if (!s) return '';
-  if (s.loading) return '<div class="status-line status-loading">Checking...</div>';
-  if (s.error) return `<div class="status-line status-offline">Error: ${escapeHtml(s.error)}</div>`;
-
-  let dot, cls, text;
-  if (s.lastActionStatus === 'Online') { dot = '🟢'; cls = 'status-online'; text = 'Online'; }
-  else if (s.lastActionStatus === 'Idle') { dot = '🟡'; cls = 'status-idle'; text = `Idle · ${s.lastActionRelative}`; }
-  else { dot = '⚫'; cls = 'status-offline'; text = `Offline · ${s.lastActionRelative}`; }
-
-  // Flag unreachable states
-  let stateSuffix = '';
-  if (s.state && s.state !== 'Okay') {
-    stateSuffix = ` · <span class="status-unreachable">${escapeHtml(s.state)}</span>`;
-  }
-
-  return `<div class="status-line ${cls}">${dot} ${text}${stateSuffix}</div>`;
+function calcRestock() {
+  const sel = document.getElementById('rt-country');
+  const tv = document.getElementById('rt-restock-time').value;
+  const buf = parseInt(document.getElementById('rt-buffer').value)||0;
+  if (!sel||!tv) return;
+  const dest = DESTINATIONS.find(d=>d.name===sel.value);
+  if (!dest) return;
+  const flight = Math.round(dest.standardMin*(state.settings.travelMethod||0.7));
+  const [rh,rm] = tv.split(':').map(Number);
+  const restock = rh*60+rm;
+  const arrive = (restock+buf)%1440;
+  let leave = arrive-flight;
+  let note = '';
+  if (leave<0) { leave+=1440; note='Departure is the previous calendar day.'; }
+  document.getElementById('rt-flight').textContent = formatDuration(flight);
+  document.getElementById('rt-arrive').textContent = toAmPm(arrive);
+  document.getElementById('rt-leave').textContent = toAmPm(leave);
+  document.getElementById('rt-note').textContent = note;
 }
 
-// ============ JSONBIN SYNC ============
-async function jsonbinRead() {
-  if (!state.settings.binId || !state.settings.binKey) return null;
-  const resp = await fetch(`https://api.jsonbin.io/v3/b/${state.settings.binId}/latest`, {
-    headers: { 'X-Master-Key': state.settings.binKey }
-  });
-  if (!resp.ok) throw new Error(`JSONBin read failed: ${resp.status}`);
-  const data = await resp.json();
-  return data.record;
+// ===== TRIP PLANNER =====
+let plannedCountry = null;
+function setPlannedCountry(c) { plannedCountry=(plannedCountry===c)?null:c; renderTripPlanner(); }
+
+function greedyFill(items,slots) {
+  const picks=[]; let left=slots;
+  for(const it of items){if(left<=0)break;const take=Math.min(it.stock,left);if(!take)continue;const pe=it.marketValue-it.cost;picks.push({itemId:it.itemId,name:it.itemName,qty:take,buyEach:it.cost,sellEach:it.marketValue,profitEach:pe,totalBuy:take*it.cost,totalSell:take*it.marketValue,totalProfit:take*pe});left-=take;}
+  return {picks,slotsUnfilled:left};
 }
 
-async function jsonbinWrite() {
-  if (!state.settings.binId || !state.settings.binKey) return false;
-  const resp = await fetch(`https://api.jsonbin.io/v3/b/${state.settings.binId}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Master-Key': state.settings.binKey
-    },
-    body: JSON.stringify({
-      traders: state.traders,
-      shitlist: state.shitlist,
-      inventory: state.inventory,
-      logbook: state.logbook
-    })
-  });
-  if (!resp.ok) throw new Error(`JSONBin write failed: ${resp.status}`);
-  return true;
+function planTrip(country) {
+  const all=extractStockRows().filter(r=>r.country===country&&r.stock>0);
+  if(!all.length) return null;
+  const fset=new Set(FLOWER_IDS), sp=(a,b)=>(b.marketValue-b.cost)-(a.marketValue-a.cost);
+  const fs=state.settings.flowerSlots!=null?state.settings.flowerSlots:5, ps=state.settings.paidSlots||19;
+  const ff=greedyFill(all.filter(r=>fset.has(r.itemId)).sort(sp),fs);
+  const taken={};ff.picks.forEach(p=>{taken[p.itemId]=(taken[p.itemId]||0)+p.qty;});
+  const of2=greedyFill(all.map(r=>({...r,stock:r.stock-(taken[r.itemId]||0)})).filter(r=>r.stock>0).sort(sp),ps);
+  const dest=DESTINATIONS.find(d=>d.name===country);
+  const tm=dest?Math.round(dest.standardMin*state.settings.travelMethod):0, rt=tm*2;
+  const tb=[...ff.picks,...of2.picks].reduce((s,p)=>s+p.totalBuy,0);
+  const ts=[...ff.picks,...of2.picks].reduce((s,p)=>s+p.totalSell,0);
+  const tp=ts-tb, pph=rt>0?Math.round(tp/(rt/60)):0;
+  return {country,travelMin:tm,roundTripMin:rt,freshnessTs:all[0].countryUpdateTs,flowerFill:ff,otherFill:of2,flowerSlots:fs,paidSlots:ps,totalBuy:tb,totalSell:ts,totalProfit:tp,profitPerHour:pph,hasMarketData:state.itemsData!==null};
 }
 
-async function syncNow() {
-  const btn = document.getElementById('sync-now-btn');
-  if (btn) { btn.textContent = 'Syncing...'; btn.disabled = true; }
-  try {
-    const record = await jsonbinRead();
-    if (record) {
-      state.traders = record.traders || [];
-      state.shitlist = record.shitlist || [];
-      state.inventory = record.inventory || {};
-      state.logbook = record.logbook || [];
-      state.lastSynced = new Date().toISOString();
-      save();
-      updateSyncStatus();
-      renderTradersTab();
-      renderCollections();
-      renderLogbook();
-      toast('Synced');
-    }
-  } catch(e) {
-    console.error(e);
-    toast('Sync failed: ' + e.message);
-  }
-  if (btn) { btn.textContent = 'Refresh from cloud'; btn.disabled = false; }
+function computeWhatIfProjections(country) {
+  const fset=new Set(FLOWER_IDS), mem=state.priceMemory||{};
+  const inStock=new Set(extractStockRows().filter(r=>r.country===country&&r.stock>0).map(r=>r.itemId));
+  const cutoff=30*24*60*60*1000, now=Date.now(), cands=[];
+  for(const k in mem){const m=mem[k];if(m.country!==country||inStock.has(m.itemId)||!m.lastSeenAt||now-m.lastSeenAt>cutoff)continue;const info=(state.itemsData&&state.itemsData[m.itemId])||{};const mv=info.market_value||0;if(!mv)continue;const isF=fset.has(m.itemId),slots=isF?(state.settings.flowerSlots!=null?state.settings.flowerSlots:5):(state.settings.paidSlots||19);cands.push({itemId:m.itemId,name:m.name||info.name||'Item #'+m.itemId,cost:m.cost,marketValue:mv,profitEach:mv-m.cost,lastSeenAt:m.lastSeenAt,isFlower:isF,slots,cashIfFilled:slots*m.cost,profitIfFilled:slots*(mv-m.cost)});}
+  return cands.sort((a,b)=>b.profitIfFilled-a.profitIfFilled);
 }
 
-async function syncPush() {
-  try {
-    await jsonbinWrite();
-    state.lastSynced = new Date().toISOString();
-    save();
-    updateSyncStatus();
-  } catch(e) {
-    console.error(e);
-    toast('Cloud save failed — saved locally only: ' + e.message);
-  }
+function renderTripPlanner() {
+  const c=document.getElementById('trip-planner');
+  if(!c)return;
+  if(!plannedCountry){c.innerHTML='';return;}
+  const trip=planTrip(plannedCountry);
+  const projs=computeWhatIfProjections(plannedCountry);
+  const projHtml=projs.length===0?'':('<div class="trip-section"><h4>If these were in stock \u2014 based on prices we\'ve seen before</h4><table><thead><tr><th>Item</th><th class="num">Last seen</th><th class="num">Buy each</th><th class="num">Profit each</th><th class="num">If full: profit</th></tr></thead><tbody>'+projs.map(p=>{const a=ageSinceUnix(Math.floor(p.lastSeenAt/1000));return '<tr><td>'+escapeHtml(p.name)+(p.isFlower?' <span class="hint">(flower)</span>':'')+'</td><td class="num">'+a.text+'</td><td class="num">$'+fmt(p.cost)+'</td><td class="num">$'+fmt(p.profitEach)+'</td><td class="num" style="color:#27500A">$'+fmt(p.profitIfFilled)+'</td></tr>';}).join('')+'</tbody></table></div>');
+  if(!trip){c.innerHTML='<div class="trip-panel"><h3>'+plannedCountry+' <button class="trip-close" onclick="setPlannedCountry(null)">close \u2715</button></h3><div class="trip-warning">No items in stock here right now.</div>'+projHtml+'</div>';return;}
+  const age=ageSinceUnix(trip.freshnessTs);
+  const renderPicks=(picks,title,req,unf)=>{if(!picks.length)return '<div class="trip-section"><h4>'+title+'</h4><div class="hint">No items \u2014 '+req+' slots unfilled</div></div>';const filled=picks.reduce((s,p)=>s+p.qty,0);return '<div class="trip-section"><h4>'+title+' \u2014 '+filled+'/'+req+' slots filled</h4><table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Buy each</th><th class="num">Sell each</th><th class="num">Profit each</th><th class="num">Subtotal profit</th></tr></thead><tbody>'+picks.map(p=>'<tr><td>'+escapeHtml(p.name)+'</td><td class="num">'+p.qty+'</td><td class="num">$'+fmt(p.buyEach)+'</td><td class="num">$'+fmt(p.sellEach)+'</td><td class="num">$'+fmt(p.profitEach)+'</td><td class="num">$'+fmt(p.totalProfit)+'</td></tr>').join('')+'</tbody></table>'+(unf>0?'<div class="hint" style="color:#BA7517;margin-top:4px">'+unf+' slot'+(unf!==1?'s':'')+' unfilled</div>':'')+'</div>';};
+  const now=new Date(), arrAt=new Date(now.getTime()+trip.travelMin*60000), retAt=new Date(now.getTime()+trip.roundTripMin*60000);
+  c.innerHTML='<div class="trip-panel"><h3><span>Trip plan \u2014 '+trip.country+' <span class="freshness '+age.cls+'" style="margin-left:8px">data '+age.text+'</span><span class="hint" style="margin-left:8px">'+formatDuration(trip.roundTripMin)+' round trip</span></span><button class="trip-close" onclick="setPlannedCountry(null)">close \u2715</button></h3><div class="hint" style="margin-top:-8px;margin-bottom:12px">If you fly now: arrive <strong>'+formatClockTime(arrAt)+'</strong>, return <strong>'+formatClockTime(retAt)+'</strong></div>'+(!trip.hasMarketData?'<div class="trip-warning">Add Torn API key in Settings for profit calculations.</div>':'')+renderPicks(trip.flowerFill.picks,trip.flowerSlots+' flower slot'+(trip.flowerSlots!==1?'s':''),trip.flowerSlots,trip.flowerFill.slotsUnfilled)+renderPicks(trip.otherFill.picks,trip.paidSlots+' paid slot'+(trip.paidSlots!==1?'s':''),trip.paidSlots,trip.otherFill.slotsUnfilled)+projHtml+'<div class="trip-totals"><div class="stat-card"><div class="stat-label">Cash to bring</div><div class="stat-value num cost">$'+fmt(trip.totalBuy)+'</div></div><div class="stat-card"><div class="stat-label">Expected revenue</div><div class="stat-value num">$'+fmt(trip.totalSell)+'</div></div><div class="stat-card"><div class="stat-label">Expected profit</div><div class="stat-value num profit">$'+fmt(trip.totalProfit)+'</div></div><div class="stat-card"><div class="stat-label">$/hr</div><div class="stat-value num">$'+fmt(trip.profitPerHour)+'</div></div></div></div>';
 }
 
-function updateSyncStatus() {
-  const el = document.getElementById('sync-status');
-  if (!state.settings.binId || !state.settings.binKey) {
-    el.className = 'status-chip warn';
-    el.textContent = 'Sync: not configured';
-    const banner = document.getElementById('sync-unconfigured-banner');
-    if (banner) banner.style.display = 'block';
-    return;
-  }
-  const banner = document.getElementById('sync-unconfigured-banner');
-  if (banner) banner.style.display = 'none';
-  if (!state.lastSynced) {
-    el.className = 'status-chip warn';
-    el.textContent = 'Sync: never';
-    return;
-  }
-  const ageMin = (Date.now() - new Date(state.lastSynced)) / 60000;
-  el.className = 'status-chip good';
-  el.textContent = ageMin < 1 ? 'Sync: just now' : `Sync: ${Math.round(ageMin)}m ago`;
-}
+// ===== SORT =====
+const sortState={live:{col:'profitPerHour',dir:'desc'},traders:{col:'name',dir:'asc'},shitlist:{col:'date',dir:'desc'},te:{col:'rank',dir:'asc'},plushies:{col:'name',dir:'asc'},flowers:{col:'name',dir:'asc'}};
+function toggleSort(t,col){const s=sortState[t];if(s.col===col)s.dir=s.dir==='asc'?'desc':'asc';else{s.col=col;s.dir=['name','item','country','what','tags','buys','note','source'].includes(col)?'asc':'desc';}if(t==='live')renderLiveStock();else if(t==='traders')renderTraders();else if(t==='shitlist')renderShitList();else if(t==='te')renderTeTop();else if(t==='plushies')renderCollectionTable('plushies-table-container','plushies-summary',PLUSHIE_IDS,'Plushies');else if(t==='flowers')renderCollectionTable('flowers-table-container','flowers-summary',FLOWER_IDS,'Flowers');}
+function compareValues(a,b,dir){if(a==null&&b==null)return 0;if(a==null)return 1;if(b==null)return-1;const r=typeof a==='number'&&typeof b==='number'?a-b:String(a).localeCompare(String(b),undefined,{numeric:true,sensitivity:'base'});return dir==='asc'?r:-r;}
+function thHtml(t,col,label,isNum){const s=sortState[t];let cls='sortable';if(s.col===col)cls+=s.dir==='asc'?' sort-asc':' sort-desc';return '<th class="'+cls+(isNum?' num':'')+'" onclick="toggleSort(\''+t+'\',\''+col+'\')">'+label+'</th>';}
 
-async function saveJsonbin() {
-  const binId = document.getElementById('bin-id').value.trim();
-  const binKey = document.getElementById('bin-key').value.trim();
-  if (!binId || !binKey) { toast('Both Bin ID and Master Key required'); return; }
-  state.settings.binId = binId;
-  state.settings.binKey = binKey;
-  save();
-  toast('Testing connection...');
-  try {
-    const record = await jsonbinRead();
-    if (record) {
-      state.traders = record.traders || [];
-      state.shitlist = record.shitlist || [];
-      state.inventory = record.inventory || {};
-      state.logbook = record.logbook || [];
-      state.lastSynced = new Date().toISOString();
-      save();
-      updateSyncStatus();
-      renderTradersTab();
-      renderCollections();
-      renderLogbook();
-      toast('Connected. Loaded ' + state.traders.length + ' traders, ' + state.shitlist.length + ' shit list.');
-    }
-  } catch(e) {
-    toast('Connection test failed: ' + e.message);
-  }
-}
+// ===== TORN API =====
+function parseTornUrl(url){const m=(url||'').match(/XID=(\d+)/i)||(url||'').match(/[?&]ID=(\d+)/i);return m?m[1]:null;}
+async function lookupTornUser(id){if(!state.settings.apiKey)throw new Error('Torn API key not set.');const r=await fetch('https://api.torn.com/user/'+id+'?selections=basic&key='+state.settings.apiKey);const d=await r.json();if(d.error)throw new Error('Torn API: '+d.error.error);return{id,name:d.name};}
+async function fetchTornStatus(id){const r=await fetch('https://api.torn.com/user/'+id+'?selections=basic&key='+state.settings.apiKey);const d=await r.json();if(d.error)throw new Error(d.error.error);return{lastActionStatus:d.last_action&&d.last_action.status,lastActionRelative:d.last_action&&d.last_action.relative,state:d.status&&d.status.state};}
+async function detectMyIdentity(){if(!state.settings.apiKey)return null;if(state.myKey&&state.myName)return{key:state.myKey,name:state.myName};try{const r=await fetch('https://api.torn.com/user/?selections=basic&key='+state.settings.apiKey);const d=await r.json();if(d.error)throw new Error(d.error.error);state.myName=d.name;state.myKey=d.name.toLowerCase().replace(/[^a-z0-9]/g,'');return{key:state.myKey,name:state.myName};}catch(e){return null;}}
 
-function clearJsonbin() {
-  state.settings.binId = '';
-  state.settings.binKey = '';
-  state.lastSynced = null;
-  save();
-  document.getElementById('bin-id').value = '';
-  document.getElementById('bin-key').value = '';
-  updateSyncStatus();
-  toast('JSONBin credentials removed');
-}
+// ===== COLLECTIONS =====
+let collSaveTimer=null;
+async function queueCollectionSave(){if(collSaveTimer)clearTimeout(collSaveTimer);collSaveTimer=setTimeout(async()=>{save();if(state.settings.binId&&state.settings.binKey){await syncPush();const el=document.getElementById('inv-status');if(el)el.textContent='Saved \xb7 synced just now';}},2000);}
+async function setMyItemCount(itemId,count){let me=state.myKey?{key:state.myKey,name:state.myName}:await detectMyIdentity();if(!me){toast('Set Torn API key first');return;}if(!state.inventory[me.key])state.inventory[me.key]={owner:me.name,items:{},updatedAt:new Date().toISOString()};const c=Math.max(0,parseInt(count)||0);if(c===0)delete state.inventory[me.key].items[itemId];else state.inventory[me.key].items[itemId]=c;state.inventory[me.key].updatedAt=new Date().toISOString();const el=document.getElementById('inv-status');if(el)el.textContent='Editing... (autosaves in 2s)';queueCollectionSave();updateCollectionSummaries();}
+function updateCollectionSummaries(){const ks=Object.keys(state.inventory);['plushies-summary','flowers-summary'].forEach(sid=>{const el=document.getElementById(sid);if(!el)return;const ids=sid==='plushies-summary'?PLUSHIE_IDS:FLOWER_IDS;if(!ks.length){el.textContent='\u2014 no entries yet';return;}el.textContent='\u2014 '+ks.map(k=>{const inv=state.inventory[k];const n=ids.filter(id=>inv.items&&inv.items[id]>0).length;return inv.owner+': '+n+'/'+ids.length;}).join(' \xb7 ');});}
+async function loadItemNames(){if(!state.settings.apiKey){toast('Set Torn API key first');return;}const btn=document.getElementById('refresh-inv-btn');if(btn){btn.textContent='Loading...';btn.disabled=true;}await fetchTornItems();await detectMyIdentity();renderCollections();if(btn){btn.textContent='Reload item names';btn.disabled=false;}toast('Item names loaded');}
+function getCountryForItem(itemId){if(!state.yataData)return null;let sr=state.yataData.stocks||state.yataData;for(const ck in sr){const e=sr[ck];if(!e||typeof e!=='object')continue;const dest=findDestination(ck);if(!dest)continue;let is=e.stocks||e.items||e;if(!is||typeof is!=='object')continue;if(Array.isArray(is)){for(const it of is)if(String(it.id)===String(itemId))return{country:dest.name,stock:it.quantity||0,cost:it.cost||0};}else if(is[itemId]){const it=is[itemId];return{country:dest.name,stock:it.quantity!==undefined?it.quantity:(it.stock||0),cost:it.cost||0};}}return null;}
+function renderCollectionTable(cid,sid,itemIds,label){const c=document.getElementById(cid),sum=document.getElementById(sid);if(!c)return;if(!state.itemsData){c.innerHTML='<div class="empty-state">Item names not loaded. Click "Reload item names".</div>';return;}const me=state.myKey?{key:state.myKey,name:state.myName}:null;if(me&&!state.inventory[me.key])state.inventory[me.key]={owner:me.name,items:{},updatedAt:new Date().toISOString()};let ks=Object.keys(state.inventory);if(me)ks=[me.key,...ks.filter(k=>k!==me.key)];if(!ks.length){c.innerHTML='<div class="empty-state">Set Torn API key in Settings.</div>';return;}const rows=itemIds.map(id=>{const info=state.itemsData[id]||{};return{id,name:info.name||'Item #'+id,mv:info.market_value||0,counts:ks.map(k=>(state.inventory[k].items&&state.inventory[k].items[id])||0),src:getCountryForItem(id)};});c.innerHTML='<table><thead><tr><th>Item</th>'+ks.map((k,i)=>'<th class="num">'+escapeHtml(state.inventory[k].owner||k)+(me&&k===me.key?' (you)':'')+' </th>').join('')+'<th class="num">Market</th><th>Available now</th></tr></thead><tbody>'+rows.map(r=>{const sh=r.src?(r.src.stock>0?'<span class="stock-good">'+fmt(r.src.stock)+' in '+r.src.country+' @ $'+fmt(r.src.cost)+'</span>':'<span class="stock-empty">Out in '+r.src.country+'</span>'):'<span style="color:#888780">\u2014</span>';return '<tr><td>'+escapeHtml(r.name)+'</td>'+r.counts.map((cnt,i)=>me&&ks[i]===me.key?'<td class="num"><input type="number" min="0" value="'+cnt+'" style="width:60px;padding:4px 6px;text-align:center" onchange="setMyItemCount(\''+r.id+'\',this.value)" /></td>':'<td class="num">'+(cnt>0?'<span class="stock-good">'+cnt+'</span>':'<span style="color:#888780">\u2014</span>')+'</td>').join('')+'<td class="num">'+(r.mv?'$'+fmt(r.mv):'\u2014')+'</td><td>'+sh+'</td></tr>';}).join('')+'</tbody></table>';updateCollectionSummaries();}
+function renderCollections(){const u=document.getElementById('collections-unconfigured');if(u)u.style.display=state.settings.apiKey?'none':'block';if(state.settings.apiKey&&!state.myKey)detectMyIdentity().then(()=>{renderCollectionTable('plushies-table-container','plushies-summary',PLUSHIE_IDS,'P');renderCollectionTable('flowers-table-container','flowers-summary',FLOWER_IDS,'F');});renderCollectionTable('plushies-table-container','plushies-summary',PLUSHIE_IDS,'P');renderCollectionTable('flowers-table-container','flowers-summary',FLOWER_IDS,'F');if(state.settings.apiKey&&!state.itemsData)fetchTornItems().then(()=>{renderCollectionTable('plushies-table-container','plushies-summary',PLUSHIE_IDS,'P');renderCollectionTable('flowers-table-container','flowers-summary',FLOWER_IDS,'F');});}
 
-// ============ TRADERS ============
-function toggleTraderForm() {
-  const f = document.getElementById('trader-form');
-  if (f.classList.contains('open')) {
-    cancelTraderForm();
-  } else {
-    state.editingTraderId = null;
-    document.getElementById('trader-form-title').textContent = 'Add trader';
-    document.getElementById('trader-url').readOnly = false;
-    document.getElementById('trader-url-hint').style.display = '';
-    document.getElementById('add-trader-btn').textContent = 'Save trader';
-    ['trader-url','trader-tags','trader-buys','trader-note'].forEach(id => document.getElementById(id).value = '');
-    f.classList.add('open');
-    document.getElementById('trader-url').focus();
-  }
-}
+// ===== LOGBOOK =====
+async function fetchMyLocation(){if(!state.settings.apiKey)return null;try{const r=await fetch('https://api.torn.com/user/?selections=basic&key='+state.settings.apiKey);const d=await r.json();if(d.error)return null;const s=d.status||{};return{state:s.state||null,description:s.description||null};}catch(e){return null;}}
+function formatLocation(loc){if(!loc||!loc.state)return '(unknown)';const desc=loc.description||loc.state;const icons={Traveling:'\u2708\ufe0f',Abroad:'\ud83c\udf0d',Hospital:'\ud83c\udfe5',Jail:'\ud83d\udd12',Federal:'\u26d3\ufe0f',Okay:'\ud83c\udfd9'};return (icons[loc.state]||'\ud83d\udccd')+' '+desc;}
+async function saveLogEntry(){const text=document.getElementById('logbook-text').value.trim();if(!text){toast('Write something first');return;}const btn=document.getElementById('save-log-btn');btn.textContent='Saving...';btn.disabled=true;try{let me=state.myKey?{key:state.myKey,name:state.myName}:await detectMyIdentity();if(!me)me={key:'unknown',name:'Unknown'};const loc=state.settings.apiKey?await fetchMyLocation():null;state.logbook.push({id:Date.now(),authorKey:me.key,authorName:me.name,text,location:loc,timestamp:new Date().toISOString(),editedAt:null});save();if(state.settings.binId&&state.settings.binKey)await syncPush();document.getElementById('logbook-text').value='';renderLogbook();toast('Entry saved');}catch(e){toast('Save failed: '+e.message);}btn.textContent='Save entry';btn.disabled=false;}
+async function deleteLogEntry(id){if(!confirm('Delete this entry?'))return;state.logbook=state.logbook.filter(e=>e.id!==id);save();if(state.settings.binId&&state.settings.binKey)await syncPush();renderLogbook();toast('Removed');}
+function startEditLog(id){const e=state.logbook.find(e=>e.id===id);if(!e)return;const el=document.getElementById('log-entry-'+id);if(!el)return;el.querySelector('.log-text').style.display='none';el.querySelector('.log-actions').style.display='none';const div=document.createElement('div');div.className='log-edit-area';div.innerHTML='<textarea id="log-edit-'+id+'">'+escapeHtml(e.text)+'</textarea><div style="margin-top:8px;display:flex;gap:8px"><button onclick="commitEditLog('+id+')">Save</button><button class="secondary" onclick="cancelEditLog('+id+')">Cancel</button></div>';el.appendChild(div);document.getElementById('log-edit-'+id).focus();}
+async function commitEditLog(id){const e=state.logbook.find(e=>e.id===id);if(!e)return;const t=document.getElementById('log-edit-'+id).value.trim();if(!t){toast('Cannot be empty');return;}e.text=t;e.editedAt=new Date().toISOString();save();if(state.settings.binId&&state.settings.binKey)await syncPush();renderLogbook();toast('Updated');}
+function cancelEditLog(id){renderLogbook();}
+function renderLogbook(){const u=document.getElementById('logbook-unconfigured');if(u)u.style.display=state.settings.apiKey?'none':'block';const c=document.getElementById('logbook-entries');if(!c)return;if(!state.logbook.length){c.innerHTML='<div class="empty-state">No entries yet.</div>';return;}const entries=[...state.logbook].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));c.innerHTML=entries.map(e=>{const mine=e.authorKey===state.myKey;const when=new Date(e.timestamp).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});const edited=e.editedAt?'<span class="log-edited">edited '+new Date(e.editedAt).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+'</span>':'';return '<div class="log-entry '+(mine?'mine':'theirs')+'" id="log-entry-'+e.id+'"><div class="log-meta"><span class="log-author">'+escapeHtml(e.authorName)+(mine?' (you)':'')+'</span><span class="log-when">'+when+edited+'</span></div><div class="log-location">'+formatLocation(e.location)+'</div><div class="log-text">'+escapeHtml(e.text)+'</div>'+(mine?'<div class="log-actions"><button class="secondary" onclick="startEditLog('+e.id+')">Edit</button> <button class="danger" onclick="deleteLogEntry('+e.id+')">Delete</button></div>':'')+'</div>';}).join('');}
 
-function startEditTrader(id) {
-  const t = state.traders.find(x => x.id === id);
-  if (!t) return;
-  state.editingTraderId = id;
-  const f = document.getElementById('trader-form');
-  document.getElementById('trader-form-title').textContent = `Edit ${t.name}`;
-  document.getElementById('trader-url').value = `https://www.torn.com/profiles.php?XID=${t.tornId}`;
-  document.getElementById('trader-url').readOnly = true;
-  document.getElementById('trader-url-hint').style.display = 'none';
-  document.getElementById('trader-tags').value = t.tags || '';
-  document.getElementById('trader-buys').value = t.buys || '';
-  document.getElementById('trader-note').value = t.note || '';
-  document.getElementById('add-trader-btn').textContent = 'Save changes';
-  f.classList.add('open');
-  f.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  document.getElementById('trader-tags').focus();
-}
+// ===== TRADER STATUS =====
+async function checkAllStatus(){if(!state.settings.apiKey){toast('API key required');return;}if(!state.traders.length){toast('No traders');return;}const btn=document.getElementById('check-status-btn');btn.textContent='Checking...';btn.disabled=true;state.traders.forEach(t=>{state.statusByTornId[t.tornId]={loading:true};});renderTraders();const res=await Promise.allSettled(state.traders.map(t=>fetchTornStatus(t.tornId).then(s=>({tornId:t.tornId,status:s}))));res.forEach((r,i)=>{const id=state.traders[i].tornId;state.statusByTornId[id]=r.status==='fulfilled'?r.value.status:{error:r.reason.message||'Failed'};});state.statusCheckedAt=new Date().toISOString();renderTraders();updateStatusCheckedLabel();btn.textContent='Check status';btn.disabled=false;const failed=res.filter(r=>r.status==='rejected').length;toast(failed>0?'Checked '+(res.length-failed)+'/'+res.length+' ('+failed+' failed)':'Checked '+res.length+' trader'+(res.length!==1?'s':''));}
+function updateStatusCheckedLabel(){const el=document.getElementById('status-checked-at');if(!el)return;if(!state.statusCheckedAt){el.textContent='Status not checked yet';return;}const s=Math.round((Date.now()-new Date(state.statusCheckedAt))/1000);el.textContent='Status checked '+(s<60?s+'s':Math.round(s/60)+'m')+' ago';}
+function renderStatusCell(id){const s=state.statusByTornId[id];if(!s)return'';if(s.loading)return'<div class="status-line status-loading">Checking...</div>';if(s.error)return'<div class="status-line status-offline">Error: '+escapeHtml(s.error)+'</div>';let dot,cls,txt;if(s.lastActionStatus==='Online'){dot='\ud83d\udfe2';cls='status-online';txt='Online';}else if(s.lastActionStatus==='Idle'){dot='\ud83d\udfe1';cls='status-idle';txt='Idle \xb7 '+s.lastActionRelative;}else{dot='\u26ab';cls='status-offline';txt='Offline \xb7 '+s.lastActionRelative;}let suf=s.state&&s.state!=='Okay'?' \xb7 <span class="status-unreachable">'+escapeHtml(s.state)+'</span>':'';return'<div class="status-line '+cls+'">'+dot+' '+txt+suf+'</div>';}
 
-function cancelTraderForm() {
-  state.editingTraderId = null;
-  const f = document.getElementById('trader-form');
-  f.classList.remove('open');
-  ['trader-url','trader-tags','trader-buys','trader-note'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('trader-url').readOnly = false;
-  document.getElementById('trader-url-hint').style.display = '';
-}
+// ===== JSONBIN =====
+async function jsonbinRead(){if(!state.settings.binId||!state.settings.binKey)return null;const r=await fetch('https://api.jsonbin.io/v3/b/'+state.settings.binId+'/latest',{headers:{'X-Master-Key':state.settings.binKey}});if(!r.ok)throw new Error('JSONBin read failed: '+r.status);return(await r.json()).record;}
+async function jsonbinWrite(){if(!state.settings.binId||!state.settings.binKey)return;const r=await fetch('https://api.jsonbin.io/v3/b/'+state.settings.binId,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':state.settings.binKey},body:JSON.stringify({traders:state.traders,shitlist:state.shitlist,inventory:state.inventory,logbook:state.logbook})});if(!r.ok)throw new Error('JSONBin write failed: '+r.status);}
+async function syncNow(){const btn=document.getElementById('sync-now-btn');if(btn){btn.textContent='Syncing...';btn.disabled=true;}try{const rec=await jsonbinRead();if(rec){state.traders=rec.traders||[];state.shitlist=rec.shitlist||[];state.inventory=rec.inventory||{};state.logbook=rec.logbook||[];state.lastSynced=new Date().toISOString();save();updateSyncStatus();renderTradersTab();renderCollections();renderLogbook();toast('Synced');}}catch(e){toast('Sync failed: '+e.message);}if(btn){btn.textContent='Refresh from cloud';btn.disabled=false;}}
+async function syncPush(){try{await jsonbinWrite();state.lastSynced=new Date().toISOString();save();updateSyncStatus();}catch(e){toast('Cloud save failed \u2014 local only: '+e.message);}}
+function updateSyncStatus(){const el=document.getElementById('sync-status');const banner=document.getElementById('sync-unconfigured-banner');if(!state.settings.binId||!state.settings.binKey){el.className='status-chip warn';el.textContent='Sync: not configured';if(banner)banner.style.display='block';return;}if(banner)banner.style.display='none';if(!state.lastSynced){el.className='status-chip warn';el.textContent='Sync: never';return;}const m=(Date.now()-new Date(state.lastSynced))/60000;el.className='status-chip good';el.textContent=m<1?'Sync: just now':'Sync: '+Math.round(m)+'m ago';}
+async function saveJsonbin(){const id=document.getElementById('bin-id').value.trim(),key=document.getElementById('bin-key').value.trim();if(!id||!key){toast('Both fields required');return;}state.settings.binId=id;state.settings.binKey=key;save();toast('Testing...');try{const rec=await jsonbinRead();if(rec){state.traders=rec.traders||[];state.shitlist=rec.shitlist||[];state.inventory=rec.inventory||{};state.logbook=rec.logbook||[];state.lastSynced=new Date().toISOString();save();updateSyncStatus();renderTradersTab();renderCollections();renderLogbook();toast('Connected. '+state.traders.length+' traders, '+state.shitlist.length+' shit list.');}}catch(e){toast('Failed: '+e.message);}}
+function clearJsonbin(){state.settings.binId='';state.settings.binKey='';state.lastSynced=null;save();document.getElementById('bin-id').value='';document.getElementById('bin-key').value='';updateSyncStatus();toast('Credentials removed');}
 
-async function saveTraderForm() {
-  // Edit mode: just update fields, no API call
-  if (state.editingTraderId) {
-    const t = state.traders.find(x => x.id === state.editingTraderId);
-    if (!t) { toast('Trader not found'); cancelTraderForm(); return; }
-    t.tags = document.getElementById('trader-tags').value.trim();
-    t.buys = document.getElementById('trader-buys').value.trim();
-    t.note = document.getElementById('trader-note').value.trim();
-    save();
-    if (state.settings.binId && state.settings.binKey) await syncPush();
-    cancelTraderForm();
-    renderTradersTab();
-    toast('Updated');
-    return;
-  }
+// ===== TRADERS =====
+function toggleTraderForm(){const f=document.getElementById('trader-form');if(f.classList.contains('open')){cancelTraderForm();return;}state.editingTraderId=null;document.getElementById('trader-form-title').textContent='Add trader';document.getElementById('trader-url').readOnly=false;document.getElementById('trader-url-hint').style.display='';document.getElementById('add-trader-btn').textContent='Save trader';['trader-url','trader-tags','trader-buys','trader-note'].forEach(id=>document.getElementById(id).value='');f.classList.add('open');document.getElementById('trader-url').focus();}
+function startEditTrader(id){const t=state.traders.find(x=>x.id===id);if(!t)return;state.editingTraderId=id;document.getElementById('trader-form-title').textContent='Edit '+t.name;document.getElementById('trader-url').value='https://www.torn.com/profiles.php?XID='+t.tornId;document.getElementById('trader-url').readOnly=true;document.getElementById('trader-url-hint').style.display='none';document.getElementById('trader-tags').value=t.tags||'';document.getElementById('trader-buys').value=t.buys||'';document.getElementById('trader-note').value=t.note||'';document.getElementById('add-trader-btn').textContent='Save changes';document.getElementById('trader-form').classList.add('open');document.getElementById('trader-tags').focus();}
+function cancelTraderForm(){state.editingTraderId=null;document.getElementById('trader-form').classList.remove('open');['trader-url','trader-tags','trader-buys','trader-note'].forEach(id=>document.getElementById(id).value='');document.getElementById('trader-url').readOnly=false;document.getElementById('trader-url-hint').style.display='';}
+async function saveTraderForm(){if(state.editingTraderId){const t=state.traders.find(x=>x.id===state.editingTraderId);if(!t){toast('Not found');cancelTraderForm();return;}t.tags=document.getElementById('trader-tags').value.trim();t.buys=document.getElementById('trader-buys').value.trim();t.note=document.getElementById('trader-note').value.trim();save();if(state.settings.binId&&state.settings.binKey)await syncPush();cancelTraderForm();renderTradersTab();toast('Updated');return;}const url=document.getElementById('trader-url').value.trim(),tags=document.getElementById('trader-tags').value.trim(),buys=document.getElementById('trader-buys').value.trim(),note=document.getElementById('trader-note').value.trim();const tid=parseTornUrl(url);if(!tid){toast("Couldn't find ID");return;}const onS=state.shitlist.find(s=>s.tornId===tid);if(onS&&!confirm('\u26a0 On shit list: "'+onS.what+'"\n\nAdd anyway?'))return;const btn=document.getElementById('add-trader-btn');btn.textContent='Looking up...';btn.disabled=true;try{const u=await lookupTornUser(tid);if(state.traders.find(t=>t.tornId===tid)){toast(u.name+' already in traders');btn.textContent='Save trader';btn.disabled=false;return;}state.traders.push({id:Date.now(),tornId:tid,name:u.name,tags,buys,note,addedAt:new Date().toISOString()});save();await syncPush();cancelTraderForm();renderTradersTab();toast('Added '+u.name);}catch(e){toast('Failed: '+e.message);}btn.textContent='Save trader';btn.disabled=false;}
+async function deleteTrader(id){if(!confirm('Remove?'))return;state.traders=state.traders.filter(t=>t.id!==id);save();await syncPush();renderTradersTab();toast('Removed');}
+function renderTraders(){const c=document.getElementById('traders-table-container');if(!state.traders.length){c.innerHTML='<div class="empty-state">No traders yet.</div>';return;}const{col,dir}=sortState.traders;const rows=[...state.traders].sort((a,b)=>compareValues(a[col],b[col],dir));c.innerHTML='<table><thead><tr>'+thHtml('traders','name','Trader',false)+thHtml('traders','tags','Tags',false)+thHtml('traders','buys','Buys',false)+thHtml('traders','note','Note',false)+'<th>Links</th><th></th></tr></thead><tbody>'+rows.map(t=>{const onS=state.shitlist.find(s=>s.tornId===t.tornId);return'<tr><td><div class="trader-name">'+escapeHtml(t.name)+(onS?'<span class="shit-flag">\u26a0 on shit list</span>':'')+'</div><div class="hint">ID: '+t.tornId+'</div>'+renderStatusCell(t.tornId)+'</td><td>'+(t.tags||'').split(',').filter(x=>x.trim()).map(x=>'<span class="tag-pill">'+escapeHtml(x.trim())+'</span>').join('')+'</td><td>'+escapeHtml(t.buys||'\u2014')+'</td><td style="max-width:300px">'+escapeHtml(t.note||'\u2014')+'</td><td class="action-links"><a href="https://www.tornexchange.com/prices/'+encodeURIComponent(t.name)+'/" target="_blank" rel="noopener">TE \u2197</a> <a href="https://www.torn.com/profiles.php?XID='+t.tornId+'" target="_blank" rel="noopener">Profile \u2197</a></td><td><button class="secondary small" onclick="startEditTrader('+t.id+')">Edit</button> <button class="danger" onclick="deleteTrader('+t.id+')">Delete</button></td></tr>';}).join('')+'</tbody></table>';}
 
-  // Add mode: existing flow
-  const url = document.getElementById('trader-url').value.trim();
-  const tags = document.getElementById('trader-tags').value.trim();
-  const buys = document.getElementById('trader-buys').value.trim();
-  const note = document.getElementById('trader-note').value.trim();
+// ===== SHIT LIST =====
+function toggleShitForm(){const f=document.getElementById('shit-form');if(f.classList.contains('open')){cancelShitForm();return;}state.editingShitId=null;document.getElementById('shit-form-title').textContent='Add to shit list';document.getElementById('shit-url').readOnly=false;document.getElementById('add-shit-btn').textContent='Save entry';['shit-url','shit-what'].forEach(id=>document.getElementById(id).value='');if(!document.getElementById('shit-date').value)document.getElementById('shit-date').value=new Date().toISOString().slice(0,10);document.getElementById('shit-source').value='me';f.classList.add('open');}
+function startEditShit(id){const s=state.shitlist.find(x=>x.id===id);if(!s)return;state.editingShitId=id;document.getElementById('shit-form-title').textContent='Edit entry for '+s.name;document.getElementById('shit-url').value='https://www.torn.com/profiles.php?XID='+s.tornId;document.getElementById('shit-url').readOnly=true;document.getElementById('shit-date').value=s.date||'';document.getElementById('shit-source').value=s.source||'me';document.getElementById('shit-what').value=s.what||'';document.getElementById('add-shit-btn').textContent='Save changes';document.getElementById('shit-form').classList.add('open');}
+function cancelShitForm(){state.editingShitId=null;document.getElementById('shit-form').classList.remove('open');['shit-url','shit-what'].forEach(id=>document.getElementById(id).value='');document.getElementById('shit-url').readOnly=false;}
+async function saveShitForm(){if(state.editingShitId){const s=state.shitlist.find(x=>x.id===state.editingShitId);if(!s){toast('Not found');cancelShitForm();return;}s.what=document.getElementById('shit-what').value.trim();s.date=document.getElementById('shit-date').value;s.source=document.getElementById('shit-source').value;if(!s.what){toast('Describe what happened');return;}save();if(state.settings.binId&&state.settings.binKey)await syncPush();cancelShitForm();renderTradersTab();toast('Updated');return;}const url=document.getElementById('shit-url').value.trim(),date=document.getElementById('shit-date').value,source=document.getElementById('shit-source').value,what=document.getElementById('shit-what').value.trim();const tid=parseTornUrl(url);if(!tid){toast("Couldn't find ID");return;}if(!what){toast('Describe what happened');return;}const btn=document.getElementById('add-shit-btn');btn.textContent='Looking up...';btn.disabled=true;try{const u=await lookupTornUser(tid);const exists=state.shitlist.find(s=>s.tornId===tid);if(exists&&!confirm(u.name+' already on shit list. Add another?')){btn.textContent='Save entry';btn.disabled=false;return;}state.shitlist.push({id:Date.now(),tornId:tid,name:u.name,what,date,source,addedAt:new Date().toISOString()});save();await syncPush();cancelShitForm();renderTradersTab();toast('Added '+u.name+' to shit list');}catch(e){toast('Failed: '+e.message);}btn.textContent='Save entry';btn.disabled=false;}
+async function deleteShit(id){if(!confirm('Remove?'))return;state.shitlist=state.shitlist.filter(s=>s.id!==id);save();await syncPush();renderTradersTab();toast('Removed');}
+function renderShitList(){const c=document.getElementById('shit-table-container');if(!state.shitlist.length){c.innerHTML='<div class="empty-state" style="padding:20px">No entries. Good day.</div>';return;}c.innerHTML='<table><thead><tr><th>Name</th><th>What happened</th><th>Date</th><th>Source</th><th>Link</th><th></th></tr></thead><tbody>'+[...state.shitlist].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(s=>{const sc=s.source==='me'?'source-me':s.source==='plybur'?'source-plybur':'source-hearsay';const sl=s.source==='me'?'Hunka':s.source==='plybur'?'PlyBur':'Hearsay';return'<tr><td><div class="trader-name">'+escapeHtml(s.name)+'</div><div class="hint">ID: '+s.tornId+'</div></td><td style="max-width:400px">'+escapeHtml(s.what)+'</td><td class="num">'+s.date+'</td><td><span class="source-pill '+sc+'">'+sl+'</span></td><td><a href="https://www.torn.com/profiles.php?XID='+s.tornId+'" target="_blank">Profile \u2197</a></td><td><button class="secondary small" onclick="startEditShit('+s.id+')">Edit</button> <button class="danger" onclick="deleteShit('+s.id+')">Delete</button></td></tr>';}).join('')+'</tbody></table>';}
 
-  const tornId = parseTornUrl(url);
-  if (!tornId) { toast("Couldn't find an ID in that URL"); return; }
+// ===== TE TOP 30 =====
+function renderTeTop(){const c=document.getElementById('te-top-container');c.innerHTML='<table><thead><tr><th>Rank</th><th>Trader</th><th class="num">Trades/30d</th><th>Price list</th></tr></thead><tbody>'+TE_TOP_30.map(t=>{const onS=state.shitlist.find(s=>s.name.toLowerCase()===t.name.toLowerCase());return'<tr><td class="num">#'+t.rank+'</td><td><strong>'+escapeHtml(t.name)+'</strong>'+(onS?'<span class="shit-flag">\u26a0 on shit list</span>':'')+'</td><td class="num">'+t.trades.toLocaleString()+'</td><td><a href="https://www.tornexchange.com/prices/'+encodeURIComponent(t.name)+'/" target="_blank">View \u2197</a></td></tr>';}).join('')+'</tbody></table>';}
 
-  const onShitList = state.shitlist.find(s => s.tornId === tornId);
-  if (onShitList) {
-    const confirmed = confirm(`⚠ This person is on the shit list:\n\n"${onShitList.what}"\n(${onShitList.source}, ${onShitList.date})\n\nAdd to Our Traders anyway?`);
-    if (!confirmed) return;
-  }
+function renderTradersTab(){renderTraders();renderShitList();renderTeTop();}
+function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
-  const btn = document.getElementById('add-trader-btn');
-  btn.textContent = 'Looking up...';
-  btn.disabled = true;
+// ===== LIVE STOCK =====
+function populateDestDropdown(){document.getElementById('live-country').innerHTML='<option value="all">All countries</option>'+DESTINATIONS.map(d=>'<option value="'+d.name+'">'+d.name+'</option>').join('');}
+function initSettings(){document.getElementById('tz-offset').value=state.settings.tzOffset;document.getElementById('travel-method').value=state.settings.travelMethod;document.getElementById('paid-slots').value=state.settings.paidSlots||19;document.getElementById('flower-slots').value=state.settings.flowerSlots!=null?state.settings.flowerSlots:5;const lc=document.getElementById('live-capacity');if(lc)lc.value=state.settings.paidSlots||19;if(state.settings.apiKey){document.getElementById('api-key').value=state.settings.apiKey;setTornStatus('good','Torn API: key set');}if(state.settings.binId)document.getElementById('bin-id').value=state.settings.binId;if(state.settings.binKey)document.getElementById('bin-key').value=state.settings.binKey;updateYataStatus();updateSyncStatus();}
+function setTornStatus(lv,msg){const el=document.getElementById('torn-status');el.className='status-chip '+lv;el.textContent=msg;}
+function updateYataStatus(){const el=document.getElementById('yata-status');if(!state.yataFetchedAt){el.className='status-chip warn';el.textContent='YATA: not loaded';return;}const m=(Date.now()-new Date(state.yataFetchedAt))/60000;el.className='status-chip '+(m<YATA_CACHE_MINUTES?'good':'warn');el.textContent='YATA: '+(m<YATA_CACHE_MINUTES?'fresh':'stale')+' ('+Math.round(m)+'m ago)';}
+async function saveApiKey(){const key=document.getElementById('api-key').value.trim();if(!key){toast('Enter a key');return;}if(key.length!==16){toast('Keys are 16 chars');return;}setTornStatus('warn','Torn API: testing...');try{const r=await fetch('https://api.torn.com/key/?selections=info&key='+key);const d=await r.json();if(d.error){setTornStatus('bad','Torn API error: '+d.error.error);toast('Key test failed');return;}state.settings.apiKey=key;save();setTornStatus('good','Torn API: connected');toast('API key saved');refreshAll();}catch(e){setTornStatus('bad','Network error');toast('Network error');}}
+function clearApiKey(){state.settings.apiKey='';save();document.getElementById('api-key').value='';setTornStatus('warn','Torn API: no key');toast('Key removed');}
+async function fetchYataStock(){if(state.yataData&&state.yataFetchedAt&&(Date.now()-new Date(state.yataFetchedAt))/60000<YATA_CACHE_MINUTES){toast('Using cached YATA data');return true;}try{const r=await fetch('https://yata.yt/api/v1/travel/export/');if(!r.ok)throw new Error('HTTP '+r.status);state.yataData=await r.json();state.yataFetchedAt=new Date().toISOString();updatePriceMemory();save();return true;}catch(e){toast('YATA fetch failed: '+e.message);return false;}}
+function updatePriceMemory(){const rows=extractStockRows(),now=Date.now();if(!state.priceMemory)state.priceMemory={};for(const r of rows){if(r.stock<=0)continue;state.priceMemory[r.country+'|'+r.itemId]={country:r.country,itemId:r.itemId,name:r.itemName,cost:r.cost,lastSeenAt:now,lastSeenStock:r.stock};}}
+async function fetchTornItems(){if(!state.settings.apiKey)return false;if(state.itemsData&&state.itemsFetchedAt&&(Date.now()-new Date(state.itemsFetchedAt))/60000<60)return true;try{const r=await fetch('https://api.torn.com/torn/?selections=items&key='+state.settings.apiKey);const d=await r.json();if(d.error)return false;state.itemsData=d.items;state.itemsFetchedAt=new Date().toISOString();save();return true;}catch(e){return false;}}
+async function refreshAll(){const btn=document.getElementById('refresh-btn');btn.textContent='Refreshing...';btn.disabled=true;const ok=await fetchYataStock();if(state.settings.apiKey)await fetchTornItems();updateYataStatus();if(ok){document.getElementById('last-refresh').textContent='YATA data fetched: '+new Date(state.yataFetchedAt).toLocaleString();renderLiveStock();toast('Data refreshed');}btn.textContent='Refresh data';btn.disabled=false;}
+function findDestination(key){const k=(key||'').toLowerCase().trim();return DESTINATIONS.find(d=>d.yataCodes.some(c=>c===k||k.startsWith(c)||c.startsWith(k)));}
+function extractStockRows(){const rows=[];if(!state.yataData)return rows;let sr=state.yataData.stocks||state.yataData;for(const ck in sr){const e=sr[ck];if(!e||typeof e!=='object')continue;const dest=findDestination(ck);if(!dest)continue;let is=e.stocks||e.items||e;if(!is||typeof is!=='object')continue;if(Array.isArray(is))for(const it of is)addRow(rows,dest.name,it.id,it,e);else for(const id in is){const it=is[id];if(it&&typeof it==='object')addRow(rows,dest.name,id,it,e);}}return rows;}
+function addRow(rows,cn,itemId,item,ce){const q=item.quantity!==undefined?item.quantity:(item.stock!==undefined?item.stock:0);const cost=item.cost!==undefined?item.cost:(item.price!==undefined?item.price:0);const info=(state.itemsData&&state.itemsData[itemId])||{};const name=info.name||item.name||'Item #'+itemId;const mv=info.market_value||item.market_value||0;const ts=ce&&(ce.update||ce.timestamp);rows.push({country:cn,itemId:String(itemId),itemName:name,stock:Number(q)||0,cost:Number(cost)||0,marketValue:Number(mv)||0,countryUpdateTs:ts?Number(ts):null});}
+function renderLiveStock(){const c=document.getElementById('live-table-container');if(!state.yataData){c.innerHTML='<div class="empty-state">Click "Refresh data" to load stock from YATA.</div>';return;}const rows=extractStockRows();if(!rows.length){c.innerHTML='<div class="empty-state">YATA returned data but no rows parseable.</div>';return;}const min=parseInt(document.getElementById('live-min-stock').value)||0,cap=parseInt(document.getElementById('live-capacity').value)||19,cf=document.getElementById('live-country').value,st=(document.getElementById('live-search').value||'').toLowerCase().trim();const enriched=rows.map(r=>{const pp=r.marketValue-r.cost,tp=pp*cap,dest=DESTINATIONS.find(d=>d.name===r.country),tm=dest?Math.round(dest.standardMin*state.settings.travelMethod):0,hpf=(tm*2)/60,pph=hpf>0?Math.round(tp/hpf):0;return{...r,profitPerItem:pp,totalProfit:tp,profitPerHour:pph,travelMin:tm};}).filter(r=>r.stock>=min&&(cf==='all'||r.country===cf)&&(!st||r.itemName.toLowerCase().includes(st)));const{col,dir}=sortState.live;enriched.sort((a,b)=>compareValues(a[col],b[col],dir));if(!enriched.length){c.innerHTML='<div class="empty-state">No items match filters.</div>';return;}const hmd=state.itemsData!==null;c.innerHTML='<table><thead><tr>'+thHtml('live','country','Country',false)+thHtml('live','countryUpdateTs','Data age',false)+thHtml('live','itemName','Item',false)+thHtml('live','stock','Stock',true)+thHtml('live','cost','Buy',true)+(hmd?thHtml('live','marketValue','Market',true)+thHtml('live','profitPerItem','Profit/item',true)+thHtml('live','totalProfit','Total (@cap)',true)+thHtml('live','profitPerHour','$/hr',true):'<th colspan="4" style="font-weight:400;color:#888780">Add API key for profit calcs</th>')+'</tr></thead><tbody>'+enriched.map(r=>{const sc=r.stock===0?'stock-empty':r.stock<500?'stock-low':'stock-good';const pc=hmd?'<td class="num">$'+fmt(r.marketValue)+'</td><td class="num">$'+fmt(r.profitPerItem)+'</td><td class="num">$'+fmt(r.totalProfit)+'</td><td class="num">$'+fmt(r.profitPerHour)+'</td>':'<td colspan="4" style="color:#888780">\u2014</td>';const age=ageSinceUnix(r.countryUpdateTs);return'<tr><td><span class="country-link" onclick="setPlannedCountry(\''+r.country.replace(/'/g,"\\'")+'\')">' +r.country+'</span></td><td><span class="freshness '+age.cls+'">'+age.text+'</span></td><td>'+escapeHtml(r.itemName)+'</td><td class="num '+sc+'">'+fmt(r.stock)+'</td><td class="num">$'+fmt(r.cost)+'</td>'+pc+'</tr>';}).join('')+'</tbody></table>';renderTripPlanner();}
+function saveSettings(){state.settings.tzOffset=parseFloat(document.getElementById('tz-offset').value)||(-7);state.settings.travelMethod=parseFloat(document.getElementById('travel-method').value)||0.7;state.settings.paidSlots=Math.max(1,parseInt(document.getElementById('paid-slots').value)||19);state.settings.flowerSlots=Math.max(0,parseInt(document.getElementById('flower-slots').value)||0);const lc=document.getElementById('live-capacity');if(lc)lc.value=state.settings.paidSlots;save();if(restockTimerOpen)populateRestockCountries();renderLiveStock();toast('Settings saved');}
+function switchTab(tab){document.querySelectorAll('.tab').forEach(t=>{t.classList.toggle('active',t.dataset.tab===tab);t.blur();});document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===tab));if(tab==='live')renderLiveStock();if(tab==='traders'){renderTradersTab();if(state.settings.binId&&state.settings.binKey&&(!state.lastSynced||(Date.now()-new Date(state.lastSynced))/60000>1))syncNow();}if(tab==='collections'){renderCollections();if(state.settings.binId&&state.settings.binKey&&(!state.lastSynced||(Date.now()-new Date(state.lastSynced))/60000>1))syncNow();}if(tab==='logbook'){renderLogbook();if(state.settings.binId&&state.settings.binKey&&(!state.lastSynced||(Date.now()-new Date(state.lastSynced))/60000>1))syncNow();}}
 
-  try {
-    const userInfo = await lookupTornUser(tornId);
-    const exists = state.traders.find(t => t.tornId === tornId);
-    if (exists) {
-      toast(`${userInfo.name} is already in Our Traders`);
-      btn.textContent = 'Save trader';
-      btn.disabled = false;
-      return;
-    }
-    state.traders.push({
-      id: Date.now(),
-      tornId,
-      name: userInfo.name,
-      tags, buys, note,
-      addedAt: new Date().toISOString()
-    });
-    save();
-    await syncPush();
-    cancelTraderForm();
-    renderTradersTab();
-    toast(`Added ${userInfo.name}`);
-  } catch(e) {
-    toast('Failed: ' + e.message);
-  }
-
-  btn.textContent = 'Save trader';
-  btn.disabled = false;
-}
-
-async function deleteTrader(id) {
-  if (!confirm('Remove this trader?')) return;
-  state.traders = state.traders.filter(t => t.id !== id);
-  save();
-  await syncPush();
-  renderTradersTab();
-  toast('Removed');
-}
-
-function renderTraders() {
-  const container = document.getElementById('traders-table-container');
-  if (state.traders.length === 0) {
-    container.innerHTML = '<div class="empty-state">No traders yet. Click "Add trader" to get started.</div>';
-    return;
-  }
-  const { col, dir } = sortState.traders;
-  const rows = [...state.traders].sort((a, b) => compareValues(a[col], b[col], dir));
-  container.innerHTML = `<table>
-    <thead><tr>
-      ${thHtml('traders', 'name', 'Trader', false)}
-      ${thHtml('traders', 'tags', 'Tags', false)}
-      ${thHtml('traders', 'buys', 'Buys', false)}
-      ${thHtml('traders', 'note', 'Note', false)}
-      <th>Links</th><th></th>
-    </tr></thead>
-    <tbody>${rows.map(t => {
-      const onShitList = state.shitlist.find(s => s.tornId === t.tornId);
-      return `<tr>
-        <td>
-          <div class="trader-name">${escapeHtml(t.name)}${onShitList ? '<span class="shit-flag">⚠ on shit list</span>' : ''}</div>
-          <div class="hint">ID: ${t.tornId}</div>
-          ${renderStatusCell(t.tornId)}
-        </td>
-        <td>${(t.tags || '').split(',').filter(x => x.trim()).map(x => `<span class="tag-pill">${escapeHtml(x.trim())}</span>`).join('')}</td>
-        <td>${escapeHtml(t.buys || '—')}</td>
-        <td style="max-width:300px">${escapeHtml(t.note || '—')}</td>
-        <td class="action-links">
-          <a href="https://www.tornexchange.com/prices/${encodeURIComponent(t.name)}/" target="_blank" rel="noopener">TE prices ↗</a>
-          <a href="https://www.torn.com/profiles.php?XID=${t.tornId}" target="_blank" rel="noopener">Torn profile ↗</a>
-        </td>
-        <td><button class="secondary small" onclick="startEditTrader(${t.id})" style="padding:3px 10px;font-size:12px;margin-right:4px">Edit</button><button class="danger" onclick="deleteTrader(${t.id})">Delete</button></td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
-}
-
-// ============ SHIT LIST ============
-function toggleShitForm() {
-  const f = document.getElementById('shit-form');
-  if (f.classList.contains('open')) {
-    cancelShitForm();
-  } else {
-    state.editingShitId = null;
-    document.getElementById('shit-form-title').textContent = 'Add to shit list';
-    document.getElementById('shit-url').readOnly = false;
-    document.getElementById('add-shit-btn').textContent = 'Save entry';
-    ['shit-url','shit-what'].forEach(id => document.getElementById(id).value = '');
-    if (!document.getElementById('shit-date').value) {
-      document.getElementById('shit-date').value = new Date().toISOString().slice(0,10);
-    }
-    document.getElementById('shit-source').value = 'me';
-    f.classList.add('open');
-    document.getElementById('shit-url').focus();
-  }
-}
-
-function startEditShit(id) {
-  const s = state.shitlist.find(x => x.id === id);
-  if (!s) return;
-  state.editingShitId = id;
-  const f = document.getElementById('shit-form');
-  document.getElementById('shit-form-title').textContent = `Edit entry for ${s.name}`;
-  document.getElementById('shit-url').value = `https://www.torn.com/profiles.php?XID=${s.tornId}`;
-  document.getElementById('shit-url').readOnly = true;
-  document.getElementById('shit-date').value = s.date || '';
-  document.getElementById('shit-source').value = s.source || 'me';
-  document.getElementById('shit-what').value = s.what || '';
-  document.getElementById('add-shit-btn').textContent = 'Save changes';
-  f.classList.add('open');
-  f.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  document.getElementById('shit-what').focus();
-}
-
-function cancelShitForm() {
-  state.editingShitId = null;
-  const f = document.getElementById('shit-form');
-  f.classList.remove('open');
-  ['shit-url','shit-what'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('shit-url').readOnly = false;
-}
-
-async function saveShitForm() {
-  // Edit mode: just update fields
-  if (state.editingShitId) {
-    const s = state.shitlist.find(x => x.id === state.editingShitId);
-    if (!s) { toast('Entry not found'); cancelShitForm(); return; }
-    s.what = document.getElementById('shit-what').value.trim();
-    s.date = document.getElementById('shit-date').value;
-    s.source = document.getElementById('shit-source').value;
-    if (!s.what) { toast('Describe what happened'); return; }
-    if (!s.date) { toast('Pick a date'); return; }
-    save();
-    if (state.settings.binId && state.settings.binKey) await syncPush();
-    cancelShitForm();
-    renderTradersTab();
-    toast('Updated');
-    return;
-  }
-
-  // Add mode
-  const url = document.getElementById('shit-url').value.trim();
-  const date = document.getElementById('shit-date').value;
-  const source = document.getElementById('shit-source').value;
-  const what = document.getElementById('shit-what').value.trim();
-
-  const tornId = parseTornUrl(url);
-  if (!tornId) { toast("Couldn't find an ID in that URL"); return; }
-  if (!what) { toast('Describe what happened'); return; }
-  if (!date) { toast('Pick a date'); return; }
-
-  const btn = document.getElementById('add-shit-btn');
-  btn.textContent = 'Looking up...';
-  btn.disabled = true;
-
-  try {
-    const userInfo = await lookupTornUser(tornId);
-    const exists = state.shitlist.find(s => s.tornId === tornId);
-    if (exists) {
-      if (!confirm(`${userInfo.name} already on shit list. Add another entry?`)) {
-        btn.textContent = 'Save entry';
-        btn.disabled = false;
-        return;
-      }
-    }
-    state.shitlist.push({
-      id: Date.now(),
-      tornId,
-      name: userInfo.name,
-      what, date, source,
-      addedAt: new Date().toISOString()
-    });
-    save();
-    await syncPush();
-    cancelShitForm();
-    renderTradersTab();
-    toast(`Added ${userInfo.name} to shit list`);
-  } catch(e) {
-    toast('Failed: ' + e.message);
-  }
-
-  btn.textContent = 'Save entry';
-  btn.disabled = false;
-}
-
-async function deleteShit(id) {
-  if (!confirm('Remove this shit list entry?')) return;
-  state.shitlist = state.shitlist.filter(s => s.id !== id);
-  save();
-  await syncPush();
-  renderTradersTab();
-  toast('Removed');
-}
-
-function renderShitList() {
-  const container = document.getElementById('shit-table-container');
-  if (state.shitlist.length === 0) {
-    container.innerHTML = '<div class="empty-state" style="padding:20px">No entries. Good day so far.</div>';
-    return;
-  }
-  const rows = [...state.shitlist].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  container.innerHTML = `<table>
-    <thead><tr>
-      <th>Name</th><th>What happened</th><th>Date</th><th>Source</th><th>Link</th><th></th>
-    </tr></thead>
-    <tbody>${rows.map(s => {
-      const sourceCls = s.source === 'me' ? 'source-me' : s.source === 'plybur' ? 'source-plybur' : 'source-hearsay';
-      const sourceLabel = s.source === 'me' ? 'Hunka' : s.source === 'plybur' ? 'PlyBur' : 'Hearsay';
-      return `<tr>
-        <td>
-          <div class="trader-name">${escapeHtml(s.name)}</div>
-          <div class="hint">ID: ${s.tornId}</div>
-        </td>
-        <td style="max-width:400px">${escapeHtml(s.what)}</td>
-        <td class="num">${s.date}</td>
-        <td><span class="source-pill ${sourceCls}">${sourceLabel}</span></td>
-        <td class="action-links"><a href="https://www.torn.com/profiles.php?XID=${s.tornId}" target="_blank" rel="noopener">Torn profile ↗</a></td>
-        <td><button class="secondary small" onclick="startEditShit(${s.id})" style="padding:3px 10px;font-size:12px;margin-right:4px">Edit</button><button class="danger" onclick="deleteShit(${s.id})">Delete</button></td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
-}
-
-// ============ TE TOP 30 ============
-function renderTeTop() {
-  const container = document.getElementById('te-top-container');
-  container.innerHTML = `<table>
-    <thead><tr><th>Rank</th><th>Trader</th><th class="num">Trades / 30d</th><th>Price list</th></tr></thead>
-    <tbody>${TE_TOP_30.map(t => {
-      // Check if this name matches anyone on our shit list (by name, not ID, since we don't have IDs here)
-      const onShit = state.shitlist.find(s => s.name.toLowerCase() === t.name.toLowerCase());
-      return `<tr>
-        <td class="num">#${t.rank}</td>
-        <td><strong>${escapeHtml(t.name)}</strong>${onShit ? '<span class="shit-flag">⚠ on shit list</span>' : ''}</td>
-        <td class="num">${t.trades.toLocaleString()}</td>
-        <td><a href="https://www.tornexchange.com/prices/${encodeURIComponent(t.name)}/" target="_blank" rel="noopener">View prices ↗</a></td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
-}
-
-function renderTradersTab() {
-  renderTraders();
-  renderShitList();
-  renderTeTop();
-}
-
-function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-// ============ EXISTING: LIVE STOCK, SETTINGS ============
-function populateDestDropdown() {
-  const countrySel = document.getElementById('live-country');
-  countrySel.innerHTML = '<option value="all">All countries</option>' + DESTINATIONS.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
-}
-
-function initSettings() {
-  document.getElementById('tz-offset').value = state.settings.tzOffset;
-  document.getElementById('travel-method').value = state.settings.travelMethod;
-  document.getElementById('paid-slots').value = state.settings.paidSlots || 19;
-  document.getElementById('flower-slots').value = state.settings.flowerSlots != null ? state.settings.flowerSlots : 5;
-  // Sync the Live Stock capacity input to the saved paid-slots default
-  const liveCap = document.getElementById('live-capacity');
-  if (liveCap) liveCap.value = state.settings.paidSlots || 19;
-  if (state.settings.apiKey) {
-    document.getElementById('api-key').value = state.settings.apiKey;
-    setTornStatus('good', 'Torn API: key set');
-  }
-  if (state.settings.binId) document.getElementById('bin-id').value = state.settings.binId;
-  if (state.settings.binKey) document.getElementById('bin-key').value = state.settings.binKey;
-  updateYataStatus();
-  updateSyncStatus();
-}
-
-function setTornStatus(level, msg) {
-  const el = document.getElementById('torn-status');
-  el.className = `status-chip ${level}`;
-  el.textContent = msg;
-}
-
-function updateYataStatus() {
-  const el = document.getElementById('yata-status');
-  if (!state.yataFetchedAt) {
-    el.className = 'status-chip warn';
-    el.textContent = 'YATA: not loaded';
-    return;
-  }
-  const ageMin = (Date.now() - new Date(state.yataFetchedAt)) / 60000;
-  if (ageMin < YATA_CACHE_MINUTES) {
-    el.className = 'status-chip good';
-    el.textContent = `YATA: fresh (${Math.round(ageMin)}m ago)`;
-  } else {
-    el.className = 'status-chip warn';
-    el.textContent = `YATA: stale (${Math.round(ageMin)}m ago)`;
-  }
-}
-
-async function saveApiKey() {
-  const key = document.getElementById('api-key').value.trim();
-  if (!key) { toast('Enter a key first'); return; }
-  if (key.length !== 16) { toast('Torn keys are 16 characters'); return; }
-  setTornStatus('warn', 'Torn API: testing...');
-  try {
-    const resp = await fetch(`https://api.torn.com/key/?selections=info&key=${key}`);
-    const data = await resp.json();
-    if (data.error) { setTornStatus('bad', `Torn API error: ${data.error.error}`); toast('Key test failed'); return; }
-    state.settings.apiKey = key;
-    save();
-    setTornStatus('good', 'Torn API: connected');
-    toast('API key saved');
-    refreshAll();
-  } catch(e) {
-    setTornStatus('bad', 'Torn API: network error');
-    toast('Network error');
-  }
-}
-
-function clearApiKey() {
-  state.settings.apiKey = '';
-  save();
-  document.getElementById('api-key').value = '';
-  setTornStatus('warn', 'Torn API: no key');
-  toast('Key removed');
-}
-
-async function fetchYataStock() {
-  if (state.yataData && state.yataFetchedAt) {
-    const ageMin = (Date.now() - new Date(state.yataFetchedAt)) / 60000;
-    if (ageMin < YATA_CACHE_MINUTES) { toast(`Cached YATA data (${Math.round(ageMin)}m old)`); return true; }
-  }
-  try {
-    const resp = await fetch('https://yata.yt/api/v1/travel/export/');
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    state.yataData = await resp.json();
-    state.yataFetchedAt = new Date().toISOString();
-    updatePriceMemory();
-    save();
-    return true;
-  } catch(e) { console.error(e); toast('YATA fetch failed: ' + e.message); return false; }
-}
-
-function updatePriceMemory() {
-  // Walk the latest YATA data; for any item with stock > 0, record/update its cost in priceMemory.
-  // Items at 0 stock leave the existing memory untouched (we keep the last seen price).
-  const rows = extractStockRows();
-  const now = Date.now();
-  if (!state.priceMemory) state.priceMemory = {};
-  for (const r of rows) {
-    if (r.stock <= 0) continue;
-    const key = `${r.country}|${r.itemId}`;
-    state.priceMemory[key] = {
-      country: r.country,
-      itemId: r.itemId,
-      name: r.itemName,
-      cost: r.cost,
-      lastSeenAt: now,
-      lastSeenStock: r.stock
-    };
-  }
-}
-
-async function fetchTornItems() {
-  if (!state.settings.apiKey) return false;
-  if (state.itemsData && state.itemsFetchedAt) {
-    const ageMin = (Date.now() - new Date(state.itemsFetchedAt)) / 60000;
-    if (ageMin < 60) return true;
-  }
-  try {
-    const resp = await fetch(`https://api.torn.com/torn/?selections=items&key=${state.settings.apiKey}`);
-    const data = await resp.json();
-    if (data.error) return false;
-    state.itemsData = data.items;
-    state.itemsFetchedAt = new Date().toISOString();
-    save();
-    return true;
-  } catch(e) { return false; }
-}
-
-async function refreshAll() {
-  const btn = document.getElementById('refresh-btn');
-  btn.textContent = 'Refreshing...';
-  btn.disabled = true;
-  const yataOk = await fetchYataStock();
-  if (state.settings.apiKey) await fetchTornItems();
-  updateYataStatus();
-  if (yataOk) {
-    document.getElementById('last-refresh').textContent = `YATA data fetched: ${new Date(state.yataFetchedAt).toLocaleString()}`;
-    renderLiveStock();
-    toast('Data refreshed');
-  }
-  btn.textContent = 'Refresh data';
-  btn.disabled = false;
-}
-
-function findDestination(key) {
-  const k = (key || '').toLowerCase().trim();
-  return DESTINATIONS.find(d => d.yataCodes.some(c => c === k || k.startsWith(c) || c.startsWith(k)));
-}
-
-function extractStockRows() {
-  const rows = [];
-  if (!state.yataData) return rows;
-  let stocksRoot = state.yataData.stocks || state.yataData;
-  for (const countryKey in stocksRoot) {
-    const entry = stocksRoot[countryKey];
-    if (!entry || typeof entry !== 'object') continue;
-    const dest = findDestination(countryKey);
-    if (!dest) continue;
-    const countryName = dest.name;
-    let itemSource = entry.stocks || entry.items || entry;
-    if (!itemSource || typeof itemSource !== 'object') continue;
-    if (Array.isArray(itemSource)) {
-      for (const item of itemSource) addRow(rows, countryName, item.id, item, entry);
-    } else {
-      for (const itemId in itemSource) {
-        const item = itemSource[itemId];
-        if (!item || typeof item !== 'object') continue;
-        addRow(rows, countryName, itemId, item, entry);
-      }
-    }
-  }
-  return rows;
-}
-
-function addRow(rows, countryName, itemId, item, countryEntry) {
-  const quantity = item.quantity !== undefined ? item.quantity : (item.stock !== undefined ? item.stock : 0);
-  const cost = item.cost !== undefined ? item.cost : (item.price !== undefined ? item.price : 0);
-  const itemInfo = (state.itemsData && state.itemsData[itemId]) || {};
-  const itemName = itemInfo.name || item.name || `Item #${itemId}`;
-  const marketValue = itemInfo.market_value || item.market_value || 0;
-  // YATA gives us a per-country "update" timestamp (unix seconds) — when this country's stock was last reported
-  const updateTs = countryEntry && (countryEntry.update || countryEntry.timestamp);
-  rows.push({
-    country: countryName,
-    itemId: String(itemId),
-    itemName,
-    stock: Number(quantity) || 0,
-    cost: Number(cost) || 0,
-    marketValue: Number(marketValue) || 0,
-    countryUpdateTs: updateTs ? Number(updateTs) : null
-  });
-}
-
-function renderLiveStock() {
-  const container = document.getElementById('live-table-container');
-  if (!state.yataData) { container.innerHTML = '<div class="empty-state">Click "Refresh data" to load foreign stock from YATA.</div>'; return; }
-  const rows = extractStockRows();
-  if (rows.length === 0) { container.innerHTML = '<div class="empty-state">YATA returned data but no rows parseable.</div>'; return; }
-  const minStock = parseInt(document.getElementById('live-min-stock').value) || 0;
-  const capacity = parseInt(document.getElementById('live-capacity').value) || 19;
-  const countryFilter = document.getElementById('live-country').value;
-  const searchEl = document.getElementById('live-search');
-  const searchTerm = (searchEl ? searchEl.value : '').toLowerCase().trim();
-
-  const enriched = rows.map(r => {
-    const profitPerItem = r.marketValue - r.cost;
-    const totalProfit = profitPerItem * capacity;
-    const dest = DESTINATIONS.find(d => d.name === r.country);
-    const travelMin = dest ? Math.round(dest.standardMin * state.settings.travelMethod) : 0;
-    const hoursPerFlight = (travelMin * 2) / 60;
-    const profitPerHour = hoursPerFlight > 0 ? Math.round(totalProfit / hoursPerFlight) : 0;
-    return { ...r, profitPerItem, totalProfit, profitPerHour, travelMin };
-  }).filter(r =>
-    r.stock >= minStock
-    && (countryFilter === 'all' || r.country === countryFilter)
-    && (searchTerm === '' || r.itemName.toLowerCase().includes(searchTerm))
-  );
-
-  const { col, dir } = sortState.live;
-  enriched.sort((a, b) => compareValues(a[col], b[col], dir));
-
-  if (enriched.length === 0) { container.innerHTML = '<div class="empty-state">No items match your filters.</div>'; return; }
-  const hasMarketData = state.itemsData !== null;
-  container.innerHTML = `<table><thead><tr>
-    ${thHtml('live', 'country', 'Country', false)}
-    ${thHtml('live', 'countryUpdateTs', 'Data age', false)}
-    ${thHtml('live', 'itemName', 'Item', false)}
-    ${thHtml('live', 'stock', 'Stock', true)}
-    ${thHtml('live', 'cost', 'Buy', true)}
-    ${hasMarketData
-      ? thHtml('live', 'marketValue', 'Market', true)
-        + thHtml('live', 'profitPerItem', 'Profit/item', true)
-        + thHtml('live', 'totalProfit', 'Total (@ cap)', true)
-        + thHtml('live', 'profitPerHour', '$/hr', true)
-      : '<th colspan="4" style="font-weight:400;color:#888780">Add Torn API key in Settings for profit calcs</th>'}
-  </tr></thead>
-  <tbody>${enriched.map(r => {
-    let stockCls = 'stock-good';
-    if (r.stock === 0) stockCls = 'stock-empty';
-    else if (r.stock < 500) stockCls = 'stock-low';
-    const profitCell = hasMarketData
-      ? `<td class="num">$${fmt(r.marketValue)}</td><td class="num">$${fmt(r.profitPerItem)}</td><td class="num">$${fmt(r.totalProfit)}</td><td class="num">$${fmt(r.profitPerHour)}</td>`
-      : '<td colspan="4" style="color:#888780">—</td>';
-    const age = ageSinceUnix(r.countryUpdateTs);
-    return `<tr><td><span class="country-link" onclick="setPlannedCountry('${r.country.replace(/'/g, "\\'")}')">${r.country}</span></td><td><span class="freshness ${age.cls}">${age.text}</span></td><td>${escapeHtml(r.itemName)}</td><td class="num ${stockCls}">${fmt(r.stock)}</td><td class="num">$${fmt(r.cost)}</td>${profitCell}</tr>`;
-  }).join('')}</tbody></table>`;
-  renderTripPlanner();
-}
-
-function saveSettings() {
-  state.settings.tzOffset = parseFloat(document.getElementById('tz-offset').value) || -7;
-  state.settings.travelMethod = parseFloat(document.getElementById('travel-method').value) || 0.7;
-  state.settings.paidSlots = Math.max(1, parseInt(document.getElementById('paid-slots').value) || 19);
-  state.settings.flowerSlots = Math.max(0, parseInt(document.getElementById('flower-slots').value) || 0);
-  // Update Live Stock capacity input to match new default
-  const liveCap = document.getElementById('live-capacity');
-  if (liveCap) liveCap.value = state.settings.paidSlots;
-  save();
-  // Re-render Live Stock + trip planner with new capacity
-  renderLiveStock();
-  toast('Settings saved');
-}
-
-function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach(t => { t.classList.toggle('active', t.dataset.tab === tab); t.blur(); });
-  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === tab));
-  if (tab === 'live') renderLiveStock();
-  if (tab === 'traders') {
-    renderTradersTab();
-    if (state.settings.binId && state.settings.binKey) {
-      const ageMin = state.lastSynced ? (Date.now() - new Date(state.lastSynced)) / 60000 : 999;
-      if (ageMin > 1) syncNow();
-    }
-  }
-  if (tab === 'collections') {
-    renderCollections();
-    if (state.settings.binId && state.settings.binKey) {
-      const ageMin = state.lastSynced ? (Date.now() - new Date(state.lastSynced)) / 60000 : 999;
-      if (ageMin > 1) syncNow();
-    }
-  }
-  if (tab === 'logbook') {
-    renderLogbook();
-    if (state.settings.binId && state.settings.binKey) {
-      const ageMin = state.lastSynced ? (Date.now() - new Date(state.lastSynced)) / 60000 : 999;
-      if (ageMin > 1) syncNow();
-    }
-  }
-}
-
-load();
-populateDestDropdown();
-initSettings();
-document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
-renderLiveStock();
-renderTradersTab();
-renderCollections();
-renderLogbook();
-updateYataStatus();
-updateSyncStatus();
-if (state.yataFetchedAt) {
-  document.getElementById('last-refresh').textContent = `YATA data fetched: ${new Date(state.yataFetchedAt).toLocaleString()}`;
-}
-setInterval(() => { updateYataStatus(); updateSyncStatus(); updateStatusCheckedLabel(); }, 30000);
-// Auto-sync if configured and on traders tab
-if (state.settings.binId && state.settings.binKey) {
-  syncNow();
-}
+load();populateDestDropdown();initSettings();
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
+renderLiveStock();renderTradersTab();renderCollections();renderLogbook();updateYataStatus();updateSyncStatus();
+if(state.yataFetchedAt)document.getElementById('last-refresh').textContent='YATA data fetched: '+new Date(state.yataFetchedAt).toLocaleString();
+setInterval(()=>{updateYataStatus();updateSyncStatus();updateStatusCheckedLabel();},30000);
+if(state.settings.binId&&state.settings.binKey)syncNow();
 </script>
