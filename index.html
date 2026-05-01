@@ -199,12 +199,10 @@
   <div class="section-header">
     <h2>Our traders</h2>
     <div>
-      <button class="small" onclick="checkAllStatus()" id="check-status-btn">Check status</button>
       <button class="small" onclick="syncNow()" id="sync-now-btn">Refresh from cloud</button>
       <button class="small" onclick="toggleTraderForm()">+ Add trader</button>
     </div>
   </div>
-  <p class="hint" id="status-checked-at" style="margin-top:-8px;margin-bottom:12px">Status not checked yet</p>
   <div class="add-form" id="trader-form">
     <h3 id="trader-form-title" style="margin-top:0">Add trader</h3>
     <div class="form-row">
@@ -254,12 +252,9 @@
     <button class="secondary" onclick="cancelShitForm()">Cancel</button>
   </div>
   <div id="shit-table-container"></div>
-  <div class="section-header">
-    <h2>Top 30 on TornExchange</h2>
-    <div><a href="https://www.tornexchange.com/listings" target="_blank" rel="noopener" style="font-size:12px;text-decoration:none;color:#534AB7">Search item on TE ↗</a></div>
+  <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e8e7e0">
+    <a href="https://www.tornexchange.com/listings" target="_blank" rel="noopener" style="font-size:13px;color:#534AB7;text-decoration:none">Search TornExchange for item prices ↗</a>
   </div>
-  <p class="section-desc">Last 30 days of activity. Click a name for their price list.</p>
-  <div id="te-top-container"></div>
 </div>
 
 <div id="collections" class="panel">
@@ -352,23 +347,6 @@ const DESTINATIONS = [
   { name: 'South Africa', standardMin: 297, yataCodes: ['sou', 'south africa'] }
 ];
 
-const TE_TOP_30 = [
-  { rank: 1, name: 'Muckamuck', trades: 5333 },{ rank: 2, name: 'begaydocrimes', trades: 2161 },
-  { rank: 3, name: 'FrostyTheXanMan', trades: 2133 },{ rank: 4, name: 'LMN_OP', trades: 2079 },
-  { rank: 5, name: 'M4rshmall0w', trades: 1774 },{ rank: 6, name: 'Dracula', trades: 1628 },
-  { rank: 7, name: 'Friends', trades: 1610 },{ rank: 8, name: 'xeven', trades: 1380 },
-  { rank: 9, name: 'SavageGrace', trades: 1159 },{ rank: 10, name: 'VexRemington', trades: 1089 },
-  { rank: 11, name: 'iSonicV', trades: 951 },{ rank: 12, name: 'Turkeybop6141', trades: 946 },
-  { rank: 13, name: 'MKBBGL', trades: 893 },{ rank: 14, name: 'Smez', trades: 872 },
-  { rank: 15, name: 'badfriend', trades: 742 },{ rank: 16, name: '-Josh-', trades: 728 },
-  { rank: 17, name: 'Emsilo', trades: 715 },{ rank: 18, name: 'AltairYanyan', trades: 691 },
-  { rank: 19, name: 'ankitjainaj', trades: 662 },{ rank: 20, name: 'the_khush', trades: 603 },
-  { rank: 21, name: 'Minitamark', trades: 566 },{ rank: 22, name: 'WhackedMaki', trades: 555 },
-  { rank: 23, name: 'joshieb', trades: 543 },{ rank: 24, name: 'Drunkinahole', trades: 527 },
-  { rank: 25, name: 'OldGoat', trades: 526 },{ rank: 26, name: 'Trivia-', trades: 509 },
-  { rank: 27, name: 'Prophecy', trades: 504 },{ rank: 28, name: '04doolant', trades: 504 },
-  { rank: 29, name: 'BlueChedow', trades: 492 },{ rank: 30, name: 'Heartflower', trades: 486 }
-];
 
 const YATA_CACHE_MINUTES = 5;
 const PLUSHIE_IDS = ['186','215','187','261','618','258','273','269','266','268','281','274','384'];
@@ -379,7 +357,6 @@ let state = {
   yataData: null, yataFetchedAt: null, priceMemory: {},
   itemsData: null, itemsFetchedAt: null,
   traders: [], shitlist: [], inventory: {}, logbook: [], lastSynced: null,
-  statusByTornId: {}, statusCheckedAt: null,
   myKey: null, myName: null, editingTraderId: null, editingShitId: null
 };
 
@@ -498,14 +475,13 @@ function renderTripPlanner() {
 
 // ===== SORT =====
 const sortState={live:{col:'profitPerHour',dir:'desc'},traders:{col:'name',dir:'asc'},shitlist:{col:'date',dir:'desc'},te:{col:'rank',dir:'asc'},plushies:{col:'name',dir:'asc'},flowers:{col:'name',dir:'asc'}};
-function toggleSort(t,col){const s=sortState[t];if(s.col===col)s.dir=s.dir==='asc'?'desc':'asc';else{s.col=col;s.dir=['name','item','country','what','tags','buys','note','source'].includes(col)?'asc':'desc';}if(t==='live')renderLiveStock();else if(t==='traders')renderTraders();else if(t==='shitlist')renderShitList();else if(t==='te')renderTeTop();else if(t==='plushies')renderCollectionTable('plushies-table-container','plushies-summary',PLUSHIE_IDS,'Plushies');else if(t==='flowers')renderCollectionTable('flowers-table-container','flowers-summary',FLOWER_IDS,'Flowers');}
+function toggleSort(t,col){const s=sortState[t];if(s.col===col)s.dir=s.dir==='asc'?'desc':'asc';else{s.col=col;s.dir=['name','item','country','what','tags','buys','note','source'].includes(col)?'asc':'desc';}if(t==='live')renderLiveStock();else if(t==='traders')renderTraders();else if(t==='shitlist')renderShitList();else if(t==='plushies')renderCollectionTable('plushies-table-container','plushies-summary',PLUSHIE_IDS,'Plushies');else if(t==='flowers')renderCollectionTable('flowers-table-container','flowers-summary',FLOWER_IDS,'Flowers');}
 function compareValues(a,b,dir){if(a==null&&b==null)return 0;if(a==null)return 1;if(b==null)return-1;const r=typeof a==='number'&&typeof b==='number'?a-b:String(a).localeCompare(String(b),undefined,{numeric:true,sensitivity:'base'});return dir==='asc'?r:-r;}
 function thHtml(t,col,label,isNum){const s=sortState[t];let cls='sortable';if(s.col===col)cls+=s.dir==='asc'?' sort-asc':' sort-desc';return '<th class="'+cls+(isNum?' num':'')+'" onclick="toggleSort(\''+t+'\',\''+col+'\')">'+label+'</th>';}
 
 // ===== TORN API =====
 function parseTornUrl(url){const m=(url||'').match(/XID=(\d+)/i)||(url||'').match(/[?&]ID=(\d+)/i);return m?m[1]:null;}
 async function lookupTornUser(id){if(!state.settings.apiKey)throw new Error('Torn API key not set.');const r=await fetch('https://api.torn.com/user/'+id+'?selections=basic&key='+state.settings.apiKey);const d=await r.json();if(d.error)throw new Error('Torn API: '+d.error.error);return{id,name:d.name};}
-async function fetchTornStatus(id){const r=await fetch('https://api.torn.com/user/'+id+'?selections=basic&key='+state.settings.apiKey);const d=await r.json();if(d.error)throw new Error(d.error.error);return{lastActionStatus:d.last_action&&d.last_action.status,lastActionRelative:d.last_action&&d.last_action.relative,state:d.status&&d.status.state};}
 async function detectMyIdentity(){if(!state.settings.apiKey)return null;if(state.myKey&&state.myName)return{key:state.myKey,name:state.myName};try{const r=await fetch('https://api.torn.com/user/?selections=basic&key='+state.settings.apiKey);const d=await r.json();if(d.error)throw new Error(d.error.error);state.myName=d.name;state.myKey=d.name.toLowerCase().replace(/[^a-z0-9]/g,'');return{key:state.myKey,name:state.myName};}catch(e){return null;}}
 
 // ===== COLLECTIONS =====
@@ -529,9 +505,6 @@ function cancelEditLog(id){renderLogbook();}
 function renderLogbook(){const u=document.getElementById('logbook-unconfigured');if(u)u.style.display=state.settings.apiKey?'none':'block';const c=document.getElementById('logbook-entries');if(!c)return;if(!state.logbook.length){c.innerHTML='<div class="empty-state">No entries yet.</div>';return;}const entries=[...state.logbook].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));c.innerHTML=entries.map(e=>{const mine=e.authorKey===state.myKey;const when=new Date(e.timestamp).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});const edited=e.editedAt?'<span class="log-edited">edited '+new Date(e.editedAt).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+'</span>':'';return '<div class="log-entry '+(mine?'mine':'theirs')+'" id="log-entry-'+e.id+'"><div class="log-meta"><span class="log-author">'+escapeHtml(e.authorName)+(mine?' (you)':'')+'</span><span class="log-when">'+when+edited+'</span></div><div class="log-location">'+formatLocation(e.location)+'</div><div class="log-text">'+escapeHtml(e.text)+'</div>'+(mine?'<div class="log-actions"><button class="secondary" onclick="startEditLog('+e.id+')">Edit</button> <button class="danger" onclick="deleteLogEntry('+e.id+')">Delete</button></div>':'')+'</div>';}).join('');}
 
 // ===== TRADER STATUS =====
-async function checkAllStatus(){if(!state.settings.apiKey){toast('API key required');return;}if(!state.traders.length){toast('No traders');return;}const btn=document.getElementById('check-status-btn');btn.textContent='Checking...';btn.disabled=true;state.traders.forEach(t=>{state.statusByTornId[t.tornId]={loading:true};});renderTraders();const res=await Promise.allSettled(state.traders.map(t=>fetchTornStatus(t.tornId).then(s=>({tornId:t.tornId,status:s}))));res.forEach((r,i)=>{const id=state.traders[i].tornId;state.statusByTornId[id]=r.status==='fulfilled'?r.value.status:{error:r.reason.message||'Failed'};});state.statusCheckedAt=new Date().toISOString();renderTraders();updateStatusCheckedLabel();btn.textContent='Check status';btn.disabled=false;const failed=res.filter(r=>r.status==='rejected').length;toast(failed>0?'Checked '+(res.length-failed)+'/'+res.length+' ('+failed+' failed)':'Checked '+res.length+' trader'+(res.length!==1?'s':''));}
-function updateStatusCheckedLabel(){const el=document.getElementById('status-checked-at');if(!el)return;if(!state.statusCheckedAt){el.textContent='Status not checked yet';return;}const s=Math.round((Date.now()-new Date(state.statusCheckedAt))/1000);el.textContent='Status checked '+(s<60?s+'s':Math.round(s/60)+'m')+' ago';}
-function renderStatusCell(id){const s=state.statusByTornId[id];if(!s)return'';if(s.loading)return'<div class="status-line status-loading">Checking...</div>';if(s.error)return'<div class="status-line status-offline">Error: '+escapeHtml(s.error)+'</div>';let dot,cls,txt;if(s.lastActionStatus==='Online'){dot='🟢';cls='status-online';txt='Online';}else if(s.lastActionStatus==='Idle'){dot='🟡';cls='status-idle';txt='Idle · '+s.lastActionRelative;}else{dot='⚫';cls='status-offline';txt='Offline · '+s.lastActionRelative;}let suf=s.state&&s.state!=='Okay'?' · <span class="status-unreachable">'+escapeHtml(s.state)+'</span>':'';return'<div class="status-line '+cls+'">'+dot+' '+txt+suf+'</div>';}
 
 // ===== JSONBIN =====
 async function jsonbinRead(){if(!state.settings.binId||!state.settings.binKey)return null;const r=await fetch('https://api.jsonbin.io/v3/b/'+state.settings.binId+'/latest',{headers:{'X-Master-Key':state.settings.binKey}});if(!r.ok)throw new Error('JSONBin read failed: '+r.status);return(await r.json()).record;}
@@ -548,7 +521,7 @@ function startEditTrader(id){const t=state.traders.find(x=>x.id===id);if(!t)retu
 function cancelTraderForm(){state.editingTraderId=null;document.getElementById('trader-form').classList.remove('open');['trader-url','trader-tags','trader-buys','trader-note'].forEach(id=>document.getElementById(id).value='');document.getElementById('trader-url').readOnly=false;document.getElementById('trader-url-hint').style.display='';}
 async function saveTraderForm(){if(state.editingTraderId){const t=state.traders.find(x=>x.id===state.editingTraderId);if(!t){toast('Not found');cancelTraderForm();return;}t.tags=document.getElementById('trader-tags').value.trim();t.buys=document.getElementById('trader-buys').value.trim();t.note=document.getElementById('trader-note').value.trim();save();if(state.settings.binId&&state.settings.binKey)await syncPush();cancelTraderForm();renderTradersTab();toast('Updated');return;}const url=document.getElementById('trader-url').value.trim(),tags=document.getElementById('trader-tags').value.trim(),buys=document.getElementById('trader-buys').value.trim(),note=document.getElementById('trader-note').value.trim();const tid=parseTornUrl(url);if(!tid){toast("Couldn't find ID");return;}const onS=state.shitlist.find(s=>s.tornId===tid);if(onS&&!confirm('⚠ On shit list: "'+onS.what+'"\n\nAdd anyway?'))return;const btn=document.getElementById('add-trader-btn');btn.textContent='Looking up...';btn.disabled=true;try{const u=await lookupTornUser(tid);if(state.traders.find(t=>t.tornId===tid)){toast(u.name+' already in traders');btn.textContent='Save trader';btn.disabled=false;return;}state.traders.push({id:Date.now(),tornId:tid,name:u.name,tags,buys,note,addedAt:new Date().toISOString()});save();await syncPush();cancelTraderForm();renderTradersTab();toast('Added '+u.name);}catch(e){toast('Failed: '+e.message);}btn.textContent='Save trader';btn.disabled=false;}
 async function deleteTrader(id){if(!confirm('Remove?'))return;state.traders=state.traders.filter(t=>t.id!==id);save();await syncPush();renderTradersTab();toast('Removed');}
-function renderTraders(){const c=document.getElementById('traders-table-container');if(!state.traders.length){c.innerHTML='<div class="empty-state">No traders yet.</div>';return;}const{col,dir}=sortState.traders;const rows=[...state.traders].sort((a,b)=>compareValues(a[col],b[col],dir));c.innerHTML='<table><thead><tr>'+thHtml('traders','name','Trader',false)+thHtml('traders','tags','Tags',false)+thHtml('traders','buys','Buys',false)+thHtml('traders','note','Note',false)+'<th>Links</th><th></th></tr></thead><tbody>'+rows.map(t=>{const onS=state.shitlist.find(s=>s.tornId===t.tornId);return'<tr><td><div class="trader-name">'+escapeHtml(t.name)+(onS?'<span class="shit-flag">⚠ on shit list</span>':'')+'</div><div class="hint">ID: '+t.tornId+'</div>'+renderStatusCell(t.tornId)+'</td><td>'+(t.tags||'').split(',').filter(x=>x.trim()).map(x=>'<span class="tag-pill">'+escapeHtml(x.trim())+'</span>').join('')+'</td><td>'+escapeHtml(t.buys||'—')+'</td><td style="max-width:300px">'+escapeHtml(t.note||'—')+'</td><td class="action-links"><a href="https://www.tornexchange.com/prices/'+encodeURIComponent(t.name)+'/" target="_blank" rel="noopener">TE ↗</a> <a href="https://www.torn.com/profiles.php?XID='+t.tornId+'" target="_blank" rel="noopener">Profile ↗</a></td><td><button class="secondary small" onclick="startEditTrader('+t.id+')">Edit</button> <button class="danger" onclick="deleteTrader('+t.id+')">Delete</button></td></tr>';}).join('')+'</tbody></table>';}
+function renderTraders(){const c=document.getElementById('traders-table-container');if(!state.traders.length){c.innerHTML='<div class="empty-state">No traders yet.</div>';return;}const{col,dir}=sortState.traders;const rows=[...state.traders].sort((a,b)=>compareValues(a[col],b[col],dir));c.innerHTML='<table><thead><tr>'+thHtml('traders','name','Trader',false)+thHtml('traders','tags','Tags',false)+thHtml('traders','buys','Buys',false)+thHtml('traders','note','Note',false)+'<th>Links</th><th></th></tr></thead><tbody>'+rows.map(t=>{const onS=state.shitlist.find(s=>s.tornId===t.tornId);return'<tr><td><div class="trader-name">'+escapeHtml(t.name)+(onS?'<span class="shit-flag">⚠ on shit list</span>':'')+'</div><div class="hint">ID: '+t.tornId+'</div></td><td>'+(t.tags||'').split(',').filter(x=>x.trim()).map(x=>'<span class="tag-pill">'+escapeHtml(x.trim())+'</span>').join('')+'</td><td>'+escapeHtml(t.buys||'—')+'</td><td style="max-width:300px">'+escapeHtml(t.note||'—')+'</td><td class="action-links"><a href="https://www.tornexchange.com/prices/'+encodeURIComponent(t.name)+'/" target="_blank" rel="noopener">TE ↗</a> <a href="https://www.torn.com/profiles.php?XID='+t.tornId+'" target="_blank" rel="noopener">Profile ↗</a></td><td><button class="secondary small" onclick="startEditTrader('+t.id+')">Edit</button> <button class="danger" onclick="deleteTrader('+t.id+')">Delete</button></td></tr>';}).join('')+'</tbody></table>';}
 
 // ===== SHIT LIST =====
 function toggleShitForm(){const f=document.getElementById('shit-form');if(f.classList.contains('open')){cancelShitForm();return;}state.editingShitId=null;document.getElementById('shit-form-title').textContent='Add to shit list';document.getElementById('shit-url').readOnly=false;document.getElementById('add-shit-btn').textContent='Save entry';['shit-url','shit-what'].forEach(id=>document.getElementById(id).value='');if(!document.getElementById('shit-date').value)document.getElementById('shit-date').value=new Date().toISOString().slice(0,10);document.getElementById('shit-source').value='me';f.classList.add('open');}
@@ -558,10 +531,7 @@ async function saveShitForm(){if(state.editingShitId){const s=state.shitlist.fin
 async function deleteShit(id){if(!confirm('Remove?'))return;state.shitlist=state.shitlist.filter(s=>s.id!==id);save();await syncPush();renderTradersTab();toast('Removed');}
 function renderShitList(){const c=document.getElementById('shit-table-container');if(!state.shitlist.length){c.innerHTML='<div class="empty-state" style="padding:20px">No entries. Good day.</div>';return;}c.innerHTML='<table><thead><tr><th>Name</th><th>What happened</th><th>Date</th><th>Source</th><th>Link</th><th></th></tr></thead><tbody>'+[...state.shitlist].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(s=>{const sc=s.source==='me'?'source-me':s.source==='plybur'?'source-plybur':'source-hearsay';const sl=s.source==='me'?'Hunka':s.source==='plybur'?'PlyBur':'Hearsay';return'<tr><td><div class="trader-name">'+escapeHtml(s.name)+'</div><div class="hint">ID: '+s.tornId+'</div></td><td style="max-width:400px">'+escapeHtml(s.what)+'</td><td class="num">'+s.date+'</td><td><span class="source-pill '+sc+'">'+sl+'</span></td><td><a href="https://www.torn.com/profiles.php?XID='+s.tornId+'" target="_blank">Profile ↗</a></td><td><button class="secondary small" onclick="startEditShit('+s.id+')">Edit</button> <button class="danger" onclick="deleteShit('+s.id+')">Delete</button></td></tr>';}).join('')+'</tbody></table>';}
 
-// ===== TE TOP 30 =====
-function renderTeTop(){const c=document.getElementById('te-top-container');c.innerHTML='<table><thead><tr><th>Rank</th><th>Trader</th><th class="num">Trades/30d</th><th>Price list</th></tr></thead><tbody>'+TE_TOP_30.map(t=>{const onS=state.shitlist.find(s=>s.name.toLowerCase()===t.name.toLowerCase());return'<tr><td class="num">#'+t.rank+'</td><td><strong>'+escapeHtml(t.name)+'</strong>'+(onS?'<span class="shit-flag">⚠ on shit list</span>':'')+'</td><td class="num">'+t.trades.toLocaleString()+'</td><td><a href="https://www.tornexchange.com/prices/'+encodeURIComponent(t.name)+'/" target="_blank">View ↗</a></td></tr>';}).join('')+'</tbody></table>';}
-
-function renderTradersTab(){renderTraders();renderShitList();renderTeTop();}
+function renderTradersTab(){renderTraders();renderShitList();}
 function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
 // ===== LIVE STOCK =====
@@ -586,6 +556,6 @@ load();populateDestDropdown();initSettings();
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
 renderLiveStock();renderTradersTab();renderCollections();renderLogbook();updateYataStatus();updateSyncStatus();
 if(state.yataFetchedAt)document.getElementById('last-refresh').textContent='YATA data fetched: '+new Date(state.yataFetchedAt).toLocaleString();
-setInterval(()=>{updateYataStatus();updateSyncStatus();updateStatusCheckedLabel();},30000);
+setInterval(()=>{updateYataStatus();updateSyncStatus();},30000);
 if(state.settings.binId&&state.settings.binKey)syncNow();
 </script>
