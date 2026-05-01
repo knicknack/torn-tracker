@@ -117,6 +117,10 @@
   .restock-outputs .out-label { font-size: 11px; color: #888780; text-transform: uppercase; letter-spacing: 0.04em; }
   .restock-outputs .out-val { font-size: 15px; font-weight: 500; }
   .restock-outputs .out-val.leave-time { font-size: 24px; color: #534AB7; }
+
+  /* Travel status banner */
+  .travel-banner { display:none; font-size:13px; padding:8px 14px; background:#EEF0FA; border:1px solid #C5C9EE; border-radius:8px; margin-bottom:12px; color:#2a2a28; }
+  .travel-banner.abroad { background:#EAF3DE; border-color:#A8D18A; }
 </style>
 
 <h1>Torn Travel Tracker</h1>
@@ -150,6 +154,7 @@
     <button class="secondary" onclick="toggleRestockTimer()" id="restock-timer-btn">⏱ Restock timer</button>
   </div>
   <p class="hint" id="last-refresh">No data yet</p>
+  <div id="travel-banner" class="travel-banner"></div>
 
   <div id="restock-timer-panel" class="restock-panel" style="display:none">
     <h3>
@@ -544,7 +549,59 @@ function clearApiKey(){state.settings.apiKey='';save();document.getElementById('
 async function fetchYataStock(){if(state.yataData&&state.yataFetchedAt&&(Date.now()-new Date(state.yataFetchedAt))/60000<YATA_CACHE_MINUTES){toast('Using cached YATA data');return true;}try{const r=await fetch('https://yata.yt/api/v1/travel/export/');if(!r.ok)throw new Error('HTTP '+r.status);state.yataData=await r.json();state.yataFetchedAt=new Date().toISOString();updatePriceMemory();save();return true;}catch(e){toast('YATA fetch failed: '+e.message);return false;}}
 function updatePriceMemory(){const rows=extractStockRows(),now=Date.now();if(!state.priceMemory)state.priceMemory={};for(const r of rows){if(r.stock<=0)continue;state.priceMemory[r.country+'|'+r.itemId]={country:r.country,itemId:r.itemId,name:r.itemName,cost:r.cost,lastSeenAt:now,lastSeenStock:r.stock};}}
 async function fetchTornItems(){if(!state.settings.apiKey)return false;if(state.itemsData&&state.itemsFetchedAt&&(Date.now()-new Date(state.itemsFetchedAt))/60000<60)return true;try{const r=await fetch('https://api.torn.com/torn/?selections=items&key='+state.settings.apiKey);const d=await r.json();if(d.error)return false;state.itemsData=d.items;state.itemsFetchedAt=new Date().toISOString();save();return true;}catch(e){return false;}}
-async function refreshAll(){const btn=document.getElementById('refresh-btn');btn.textContent='Refreshing...';btn.disabled=true;const ok=await fetchYataStock();if(state.settings.apiKey)await fetchTornItems();updateYataStatus();if(ok){document.getElementById('last-refresh').textContent='YATA data fetched: '+new Date(state.yataFetchedAt).toLocaleString();renderLiveStock();toast('Data refreshed');}btn.textContent='Refresh data';btn.disabled=false;}
+
+// ===== TRAVEL STATUS =====
+let travelStatus = null;
+
+async function fetchTravelStatus() {
+  if (!state.settings.apiKey) return null;
+  try {
+    const r = await fetch('https://api.torn.com/user/?selections=basic&key=' + state.settings.apiKey);
+    const d = await r.json();
+    if (d.error) return null;
+    const s = d.status || {};
+    travelStatus = { state: s.state, description: s.description, until: s.until || null };
+    return travelStatus;
+  } catch(e) { return null; }
+}
+
+function parseTravelDestination(status) {
+  if (!status || !status.description) return null;
+  const desc = status.description.toLowerCase();
+  for (const dest of DESTINATIONS) {
+    for (const code of dest.yataCodes) {
+      if (desc.includes(code)) return dest.name;
+    }
+  }
+  return null;
+}
+
+function renderTravelBanner() {
+  const el = document.getElementById('travel-banner');
+  if (!el) return;
+  if (!travelStatus || !state.settings.apiKey || travelStatus.state === 'Okay') {
+    el.style.display = 'none';
+    return;
+  }
+  const dest = parseTravelDestination(travelStatus);
+  let icon = '✈️';
+  let extra = '';
+  if (travelStatus.state === 'Abroad') icon = '🌍';
+  if (travelStatus.state === 'Traveling' && travelStatus.until) {
+    const mins = Math.round((travelStatus.until * 1000 - Date.now()) / 60000);
+    if (mins > 0) extra = ' · arriving in ' + formatDuration(mins);
+  }
+  el.style.display = 'block';
+  el.className = 'travel-banner' + (travelStatus.state === 'Abroad' ? ' abroad' : '');
+  el.textContent = icon + ' ' + (travelStatus.description || travelStatus.state) + extra;
+  // Auto-open trip plan
+  if (dest && plannedCountry !== dest) {
+    plannedCountry = dest;
+    renderTripPlanner();
+  }
+}
+
+async function refreshAll(){const btn=document.getElementById('refresh-btn');btn.textContent='Refreshing...';btn.disabled=true;const ok=await fetchYataStock();if(state.settings.apiKey){await fetchTornItems();await fetchTravelStatus();}updateYataStatus();renderTravelBanner();if(ok){document.getElementById('last-refresh').textContent='YATA data fetched: '+new Date(state.yataFetchedAt).toLocaleString();renderLiveStock();toast('Data refreshed');}btn.textContent='Refresh data';btn.disabled=false;}
 function findDestination(key){const k=(key||'').toLowerCase().trim();return DESTINATIONS.find(d=>d.yataCodes.some(c=>c===k||k.startsWith(c)||c.startsWith(k)));}
 function extractStockRows(){const rows=[];if(!state.yataData)return rows;let sr=state.yataData.stocks||state.yataData;for(const ck in sr){const e=sr[ck];if(!e||typeof e!=='object')continue;const dest=findDestination(ck);if(!dest)continue;let is=e.stocks||e.items||e;if(!is||typeof is!=='object')continue;if(Array.isArray(is))for(const it of is)addRow(rows,dest.name,it.id,it,e);else for(const id in is){const it=is[id];if(it&&typeof it==='object')addRow(rows,dest.name,id,it,e);}}return rows;}
 function addRow(rows,cn,itemId,item,ce){const q=item.quantity!==undefined?item.quantity:(item.stock!==undefined?item.stock:0);const cost=item.cost!==undefined?item.cost:(item.price!==undefined?item.price:0);const info=(state.itemsData&&state.itemsData[itemId])||{};const name=info.name||item.name||'Item #'+itemId;const mv=info.market_value||item.market_value||0;const ts=ce&&(ce.update||ce.timestamp);rows.push({country:cn,itemId:String(itemId),itemName:name,stock:Number(q)||0,cost:Number(cost)||0,marketValue:Number(mv)||0,countryUpdateTs:ts?Number(ts):null});}
@@ -554,7 +611,7 @@ function switchTab(tab){document.querySelectorAll('.tab').forEach(t=>{t.classLis
 
 load();populateDestDropdown();initSettings();
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
-renderLiveStock();renderTradersTab();renderCollections();renderLogbook();updateYataStatus();updateSyncStatus();
+renderLiveStock();renderTradersTab();renderCollections();renderLogbook();updateYataStatus();updateSyncStatus();if(state.settings.apiKey)fetchTravelStatus().then(renderTravelBanner);
 if(state.yataFetchedAt)document.getElementById('last-refresh').textContent='YATA data fetched: '+new Date(state.yataFetchedAt).toLocaleString();
 setInterval(()=>{updateYataStatus();updateSyncStatus();},30000);
 if(state.settings.binId&&state.settings.binKey)syncNow();
