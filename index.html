@@ -122,7 +122,7 @@
   .flight-btn { background: #e8e7e0; color: #2a2a28; font-size: 13px; padding: 6px 14px; border-radius: 6px; border: 1px solid #d3d1c7; cursor: pointer; font-family: inherit; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
   .flight-btn:hover { background: #d3d1c7; }
   .flight-btn .flight-age { font-size: 11px; color: #888780; }
-  .flight-panel { display:none; background: #faf9f5; border: 1px solid #d3d1c7; border-radius: 8px; padding: 16px; margin-bottom: 16px; border-left: 3px solid #534AB7; }
+  .flight-panel { display:none; background: #faf9f5; border: 1px solid #d3d1c7; border-radius: 8px; padding: 16px; margin-bottom: 16px; border-left: 3px solid #534AB7; pointer-events:none; }
   .flight-panel.home { border-left-color: #888780; }
   .flight-panel.abroad { border-left-color: #27500A; }
   .flight-status-line { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
@@ -160,7 +160,7 @@
     <button class="secondary" onclick="toggleRestockTimer()" id="restock-timer-btn">⏱ Restock timer</button>
   </div>
   <p class="hint" id="last-refresh">No data yet</p>
-  <button class="flight-btn" id="flight-status-btn" onclick="checkFlightStatus()" style="display:none">
+  <button class="flight-btn" id="flight-status-btn" onclick="checkFlightStatus()" style="display:none;pointer-events:auto">
     ✈️ <span id="flight-btn-label">Flight status</span>
     <span class="flight-age" id="flight-checked-age"></span>
   </button>
@@ -625,7 +625,7 @@ function renderFlightPanel() {
   const etaEl = document.getElementById('flight-eta');
   const embedEl = document.getElementById('flight-trip-embed');
 
-  panel.style.display = 'block';
+  panel.style.display = 'block'; panel.style.pointerEvents = 'auto';
 
   const dest = parseTravelDestination(travelStatus);
   const isHome = travelStatus.state === 'Okay';
