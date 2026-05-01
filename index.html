@@ -118,15 +118,6 @@
   .restock-outputs .out-val { font-size: 15px; font-weight: 500; }
   .restock-outputs .out-val.leave-time { font-size: 24px; color: #534AB7; }
 
-  /* Flight status */
-  .flight-btn { background: #e8e7e0; color: #2a2a28; font-size: 13px; padding: 6px 14px; border-radius: 6px; border: 1px solid #d3d1c7; cursor: pointer; font-family: inherit; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-  .flight-btn:hover { background: #d3d1c7; }
-  .flight-btn .flight-age { font-size: 11px; color: #888780; }
-  .flight-panel { display:none; background: #faf9f5; border: 1px solid #d3d1c7; border-radius: 8px; padding: 16px; margin-bottom: 16px; border-left: 3px solid #534AB7; pointer-events:none; }
-  .flight-panel.home { border-left-color: #888780; }
-  .flight-panel.abroad { border-left-color: #27500A; }
-  .flight-status-line { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
-  .flight-eta { font-size: 13px; color: #5f5e5a; margin-bottom: 12px; }
 </style>
 
 <h1>Torn Travel Tracker</h1>
@@ -160,15 +151,6 @@
     <button class="secondary" onclick="toggleRestockTimer()" id="restock-timer-btn">⏱ Restock timer</button>
   </div>
   <p class="hint" id="last-refresh">No data yet</p>
-  <button class="flight-btn" id="flight-status-btn" onclick="checkFlightStatus()" style="display:none;pointer-events:auto">
-    ✈️ <span id="flight-btn-label">Flight status</span>
-    <span class="flight-age" id="flight-checked-age"></span>
-  </button>
-  <div id="flight-panel" class="flight-panel">
-    <div class="flight-status-line" id="flight-status-line"></div>
-    <div class="flight-eta" id="flight-eta"></div>
-    <div id="flight-trip-embed"></div>
-  </div>
 
   <div id="restock-timer-panel" class="restock-panel" style="display:none">
     <h3>
@@ -563,149 +545,17 @@ function clearApiKey(){state.settings.apiKey='';save();document.getElementById('
 async function fetchYataStock(){if(state.yataData&&state.yataFetchedAt&&(Date.now()-new Date(state.yataFetchedAt))/60000<YATA_CACHE_MINUTES){toast('Using cached YATA data');return true;}try{const r=await fetch('https://yata.yt/api/v1/travel/export/');if(!r.ok)throw new Error('HTTP '+r.status);state.yataData=await r.json();state.yataFetchedAt=new Date().toISOString();updatePriceMemory();save();return true;}catch(e){toast('YATA fetch failed: '+e.message);return false;}}
 function updatePriceMemory(){const rows=extractStockRows(),now=Date.now();if(!state.priceMemory)state.priceMemory={};for(const r of rows){if(r.stock<=0)continue;state.priceMemory[r.country+'|'+r.itemId]={country:r.country,itemId:r.itemId,name:r.itemName,cost:r.cost,lastSeenAt:now,lastSeenStock:r.stock};}}
 async function fetchTornItems(){if(!state.settings.apiKey)return false;if(state.itemsData&&state.itemsFetchedAt&&(Date.now()-new Date(state.itemsFetchedAt))/60000<60)return true;try{const r=await fetch('https://api.torn.com/torn/?selections=items&key='+state.settings.apiKey);const d=await r.json();if(d.error)return false;state.itemsData=d.items;state.itemsFetchedAt=new Date().toISOString();save();return true;}catch(e){return false;}}
-
-// ===== FLIGHT STATUS =====
-let travelStatus = null;
-let flightCheckedAt = null;
-
-async function fetchTravelStatus() {
-  if (!state.settings.apiKey) return null;
-  try {
-    const r = await fetch('https://api.torn.com/user/?selections=basic&key=' + state.settings.apiKey);
-    const d = await r.json();
-    if (d.error) return null;
-    const s = d.status || {};
-    travelStatus = { state: s.state, description: s.description, until: s.until || null };
-    flightCheckedAt = Date.now();
-    return travelStatus;
-  } catch(e) { return null; }
-}
-
-function parseTravelDestination(status) {
-  if (!status || !status.description) return null;
-  const desc = status.description.toLowerCase();
-  for (const dest of DESTINATIONS) {
-    for (const code of dest.yataCodes) {
-      if (desc.includes(code)) return dest.name;
-    }
-  }
-  return null;
-}
-
-async function checkFlightStatus() {
-  if (!state.settings.apiKey) { toast('Set your Torn API key in Settings first'); return; }
-  const btn = document.getElementById('flight-status-btn');
-  const label = document.getElementById('flight-btn-label');
-  label.textContent = 'Checking...';
-  btn.disabled = true;
-  await fetchTravelStatus();
-  renderFlightPanel();
-  label.textContent = 'Flight status';
-  btn.disabled = false;
-}
-
-function renderFlightPanel() {
-  if (!state.settings.apiKey) return;
-
-  // Always show the button once API key is set
-  const btn = document.getElementById('flight-status-btn');
-  if (btn) btn.style.display = 'flex';
-
-  // Update age label
-  const ageEl = document.getElementById('flight-checked-age');
-  if (ageEl && flightCheckedAt) {
-    const mins = Math.round((Date.now() - flightCheckedAt) / 60000);
-    ageEl.textContent = mins < 1 ? 'just now' : mins + 'm ago';
-  }
-
-  if (!travelStatus || !flightCheckedAt) return;
-
-  const panel = document.getElementById('flight-panel');
-  const statusLine = document.getElementById('flight-status-line');
-  const etaEl = document.getElementById('flight-eta');
-  const embedEl = document.getElementById('flight-trip-embed');
-
-  panel.style.display = 'block'; panel.style.pointerEvents = 'auto';
-
-  const dest = parseTravelDestination(travelStatus);
-  const isHome = travelStatus.state === 'Okay';
-  const isReturning = travelStatus.state === 'Traveling' && !dest;
-  const isAbroad = travelStatus.state === 'Abroad';
-  const isOutbound = travelStatus.state === 'Traveling' && !!dest;
-
-  // ETA string
-  let etaText = '';
-  if (travelStatus.until) {
-    const mins = Math.round((travelStatus.until * 1000 - Date.now()) / 60000);
-    if (mins > 0) etaText = 'Landing in ' + formatDuration(mins);
-    else etaText = 'Landing imminent';
-  }
-
-  if (isHome) {
-    panel.className = 'flight-panel home';
-    statusLine.textContent = '🌆 You're in Torn';
-    etaEl.textContent = '';
-    embedEl.innerHTML = '';
-    return;
-  }
-
-  if (isReturning) {
-    panel.className = 'flight-panel home';
-    statusLine.textContent = '✈️ ' + (travelStatus.description || 'Returning to Torn');
-    etaEl.textContent = etaText;
-    embedEl.innerHTML = '';
-    return;
-  }
-
-  // Outbound or abroad — show trip plan
-  panel.className = 'flight-panel' + (isAbroad ? ' abroad' : '');
-  const icon = isAbroad ? '🌍' : '✈️';
-  statusLine.textContent = icon + ' ' + (travelStatus.description || travelStatus.state);
-  etaEl.textContent = etaText;
-
-  if (dest) {
-    // Render trip plan inline
-    const trip = planTrip(dest);
-    if (!trip) {
-      embedEl.innerHTML = '<div class="hint" style="margin-top:8px">No stock data yet for ' + escapeHtml(dest) + ' — hit Refresh data first.</div>';
-    } else {
-      // Reuse trip planner logic but render into embedEl
-      const age = ageSinceUnix(trip.freshnessTs);
-      const renderPicks = (picks, title, req, unf) => {
-        if (!picks.length) return '<div class="trip-section"><h4>' + title + '</h4><div class="hint">No items available</div></div>';
-        const filled = picks.reduce((s,p) => s+p.qty, 0);
-        return '<div class="trip-section"><h4>' + title + ' — ' + filled + '/' + req + ' slots filled</h4>' +
-          '<table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Buy each</th><th class="num">Profit each</th><th class="num">Subtotal profit</th></tr></thead>' +
-          '<tbody>' + picks.map(p => '<tr><td>' + escapeHtml(p.name) + '</td><td class="num">' + p.qty + '</td><td class="num">$' + fmt(p.buyEach) + '</td><td class="num">$' + fmt(p.profitEach) + '</td><td class="num">$' + fmt(p.totalProfit) + '</td></tr>').join('') + '</tbody></table>' +
-          (unf > 0 ? '<div class="hint" style="color:#BA7517;margin-top:4px">' + unf + ' slot' + (unf!==1?'s':'') + ' unfilled</div>' : '') + '</div>';
-      };
-      embedEl.innerHTML =
-        '<div class="hint" style="margin-bottom:10px">Data age: <span class="freshness ' + age.cls + '">' + age.text + '</span> · ' + formatDuration(trip.roundTripMin) + ' round trip</div>' +
-        (!trip.hasMarketData ? '<div class="trip-warning">Add Torn API key in Settings for profit calculations.</div>' : '') +
-        renderPicks(trip.flowerFill.picks, trip.flowerSlots + ' flower slot' + (trip.flowerSlots!==1?'s':''), trip.flowerSlots, trip.flowerFill.slotsUnfilled) +
-        renderPicks(trip.otherFill.picks, trip.paidSlots + ' paid slot' + (trip.paidSlots!==1?'s':''), trip.paidSlots, trip.otherFill.slotsUnfilled) +
-        '<div class="trip-totals">' +
-          '<div class="stat-card"><div class="stat-label">Cash to bring</div><div class="stat-value num cost">$' + fmt(trip.totalBuy) + '</div></div>' +
-          '<div class="stat-card"><div class="stat-label">Expected profit</div><div class="stat-value num profit">$' + fmt(trip.totalProfit) + '</div></div>' +
-          '<div class="stat-card"><div class="stat-label">$/hr</div><div class="stat-value num">$' + fmt(trip.profitPerHour) + '</div></div>' +
-        '</div>';
-    }
-  } else {
-    embedEl.innerHTML = '';
-  }
-}
-
-async function refreshAll(){const btn=document.getElementById('refresh-btn');btn.textContent='Refreshing...';btn.disabled=true;const ok=await fetchYataStock();if(state.settings.apiKey){await fetchTornItems();await fetchTravelStatus();}updateYataStatus();renderFlightPanel();if(ok){document.getElementById('last-refresh').textContent='YATA data fetched: '+new Date(state.yataFetchedAt).toLocaleString();renderLiveStock();toast('Data refreshed');}btn.textContent='Refresh data';btn.disabled=false;}
 function findDestination(key){const k=(key||'').toLowerCase().trim();return DESTINATIONS.find(d=>d.yataCodes.some(c=>c===k||k.startsWith(c)||c.startsWith(k)));}
 function extractStockRows(){const rows=[];if(!state.yataData)return rows;let sr=state.yataData.stocks||state.yataData;for(const ck in sr){const e=sr[ck];if(!e||typeof e!=='object')continue;const dest=findDestination(ck);if(!dest)continue;let is=e.stocks||e.items||e;if(!is||typeof is!=='object')continue;if(Array.isArray(is))for(const it of is)addRow(rows,dest.name,it.id,it,e);else for(const id in is){const it=is[id];if(it&&typeof it==='object')addRow(rows,dest.name,id,it,e);}}return rows;}
 function addRow(rows,cn,itemId,item,ce){const q=item.quantity!==undefined?item.quantity:(item.stock!==undefined?item.stock:0);const cost=item.cost!==undefined?item.cost:(item.price!==undefined?item.price:0);const info=(state.itemsData&&state.itemsData[itemId])||{};const name=info.name||item.name||'Item #'+itemId;const mv=info.market_value||item.market_value||0;const ts=ce&&(ce.update||ce.timestamp);rows.push({country:cn,itemId:String(itemId),itemName:name,stock:Number(q)||0,cost:Number(cost)||0,marketValue:Number(mv)||0,countryUpdateTs:ts?Number(ts):null});}
-function renderLiveStock(){const c=document.getElementById('live-table-container');if(!state.yataData){c.innerHTML='<div class="empty-state">Click "Refresh data" to load stock from YATA.</div>';return;}const rows=extractStockRows();if(!rows.length){c.innerHTML='<div class="empty-state">YATA returned data but no rows parseable.</div>';return;}const min=parseInt(document.getElementById('live-min-stock').value)||0,cap=parseInt(document.getElementById('live-capacity').value)||19,cf=document.getElementById('live-country').value,st=(document.getElementById('live-search').value||'').toLowerCase().trim();const enriched=rows.map(r=>{const pp=r.marketValue-r.cost,tp=pp*cap,dest=DESTINATIONS.find(d=>d.name===r.country),tm=dest?Math.round(dest.standardMin*state.settings.travelMethod):0,hpf=(tm*2)/60,pph=hpf>0?Math.round(tp/hpf):0;return{...r,profitPerItem:pp,totalProfit:tp,profitPerHour:pph,travelMin:tm};}).filter(r=>r.stock>=min&&(cf==='all'||r.country===cf)&&(!st||r.itemName.toLowerCase().includes(st)));const{col,dir}=sortState.live;enriched.sort((a,b)=>compareValues(a[col],b[col],dir));if(!enriched.length){c.innerHTML='<div class="empty-state">No items match filters.</div>';return;}const hmd=state.itemsData!==null;c.innerHTML='<table><thead><tr>'+thHtml('live','country','Country',false)+thHtml('live','countryUpdateTs','Data age',false)+thHtml('live','itemName','Item',false)+thHtml('live','stock','Stock',true)+thHtml('live','cost','Buy',true)+(hmd?thHtml('live','marketValue','Market',true)+thHtml('live','profitPerItem','Profit/item',true)+thHtml('live','totalProfit','Total (@cap)',true)+thHtml('live','profitPerHour','$/hr',true):'<th colspan="4" style="font-weight:400;color:#888780">Add API key for profit calcs</th>')+'</tr></thead><tbody>'+enriched.map(r=>{const sc=r.stock===0?'stock-empty':r.stock<500?'stock-low':'stock-good';const pc=hmd?'<td class="num">$'+fmt(r.marketValue)+'</td><td class="num">$'+fmt(r.profitPerItem)+'</td><td class="num">$'+fmt(r.totalProfit)+'</td><td class="num">$'+fmt(r.profitPerHour)+'</td>':'<td colspan="4" style="color:#888780">—</td>';const age=ageSinceUnix(r.countryUpdateTs);return'<tr><td><span class="country-link" onclick="setPlannedCountry(\''+r.country.replace(/'/g,"\\'")+'\')">' +r.country+'</span></td><td><span class="freshness '+age.cls+'">'+age.text+'</span></td><td>'+escapeHtml(r.itemName)+'</td><td class="num '+sc+'">'+fmt(r.stock)+'</td><td class="num">$'+fmt(r.cost)+'</td>'+pc+'</tr>';}).join('')+'</tbody></table>';renderTripPlanner();}
+function renderLiveStock(){const c=document.getElementById('live-table-container');if(!state.yataData){c.innerHTML='<div class="empty-state">Click "Refresh data" to load stock from YATA.</div>';return;}const rows=extractStockRows();if(!rows.length){c.innerHTML='<div class="empty-state">YATA returned data but no rows parseable.</div>';return;}const min=parseInt(document.getElementById('live-min-stock').value)||0,cap=parseInt(document.getElementById('live-capacity').value)||19,cf=document.getElementById('live-country').value,st=(document.getElementById('live-search').value||'').toLowerCase().trim();const enriched=rows.map(r=>{const pp=r.marketValue-r.cost,tp=pp*cap,dest=DESTINATIONS.find(d=>d.name===r.country),tm=dest?Math.round(dest.standardMin*state.settings.travelMethod):0,hpf=(tm*2)/60,pph=hpf>0?Math.round(tp/hpf):0;return{...r,profitPerItem:pp,totalProfit:tp,profitPerHour:pph,travelMin:tm};}).filter(r=>r.stock>=min&&(cf==='all'||r.country===cf)&&(!st||r.itemName.toLowerCase().includes(st)));const{col,dir}=sortState.live;enriched.sort((a,b)=>compareValues(a[col],b[col],dir));if(!enriched.length){c.innerHTML='<div class="empty-state">No items match filters.</div>';return;}const hmd=state.itemsData!==null;c.innerHTML='<table><thead><tr>'+thHtml('live','country','Country',false)+thHtml('live','countryUpdateTs','Data age',false)+thHtml('live','itemName','Item',false)+thHtml('live','stock','Stock',true)+thHtml('live','cost','Buy',true)+(hmd?thHtml('live','marketValue','Market',true)+thHtml('live','profitPerItem','Profit/item',true)+thHtml('live','totalProfit','Total (@cap)',true)+thHtml('live','profitPerHour','$/hr',true):'<th colspan="4" style="font-weight:400;color:#888780">Add API key for profit calcs</th>')+'</tr></thead><tbody>'+enriched.map(r=>{const sc=r.stock===0?'stock-empty':r.stock<500?'stock-low':'stock-good';const pc=hmd?'<td class="num">$'+fmt(r.marketValue)+'</td><td class="num">$'+fmt(r.profitPerItem)+'</td><td class="num">$'+fmt(r.totalProfit)+'</td><td class="num">$'+fmt(r.profitPerHour)+'</td>':'<td colspan="4" style="color:#888780">—</td>';const age=ageSinceUnix(r.countryUpdateTs);return'<tr><td><span class="country-link" onclick="setPlannedCountry(\''+r.country.replace(/'/g,"\\'")+'\')">'+r.country+'</span></td><td><span class="freshness '+age.cls+'">'+age.text+'</span></td><td>'+escapeHtml(r.itemName)+'</td><td class="num '+sc+'">'+fmt(r.stock)+'</td><td class="num">$'+fmt(r.cost)+'</td>'+pc+'</tr>';}).join('')+'</tbody></table>';renderTripPlanner();}
+async function refreshAll(){const btn=document.getElementById('refresh-btn');btn.textContent='Refreshing...';btn.disabled=true;const ok=await fetchYataStock();if(state.settings.apiKey)await fetchTornItems();updateYataStatus();if(ok){document.getElementById('last-refresh').textContent='YATA data fetched: '+new Date(state.yataFetchedAt).toLocaleString();renderLiveStock();toast('Data refreshed');}btn.textContent='Refresh data';btn.disabled=false;}
 function saveSettings(){state.settings.tzOffset=parseFloat(document.getElementById('tz-offset').value)||(-7);state.settings.travelMethod=parseFloat(document.getElementById('travel-method').value)||0.7;state.settings.paidSlots=Math.max(1,parseInt(document.getElementById('paid-slots').value)||19);state.settings.flowerSlots=Math.max(0,parseInt(document.getElementById('flower-slots').value)||0);const lc=document.getElementById('live-capacity');if(lc)lc.value=state.settings.paidSlots;save();if(restockTimerOpen)populateRestockCountries();renderLiveStock();toast('Settings saved');}
 function switchTab(tab){document.querySelectorAll('.tab').forEach(t=>{t.classList.toggle('active',t.dataset.tab===tab);t.blur();});document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===tab));if(tab==='live')renderLiveStock();if(tab==='traders'){renderTradersTab();if(state.settings.binId&&state.settings.binKey&&(!state.lastSynced||(Date.now()-new Date(state.lastSynced))/60000>1))syncNow();}if(tab==='collections'){renderCollections();if(state.settings.binId&&state.settings.binKey&&(!state.lastSynced||(Date.now()-new Date(state.lastSynced))/60000>1))syncNow();}if(tab==='logbook'){renderLogbook();if(state.settings.binId&&state.settings.binKey&&(!state.lastSynced||(Date.now()-new Date(state.lastSynced))/60000>1))syncNow();}}
 
 load();populateDestDropdown();initSettings();
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
-renderLiveStock();renderTradersTab();renderCollections();renderLogbook();updateYataStatus();updateSyncStatus();if(state.settings.apiKey){renderFlightPanel();}
+renderLiveStock();renderTradersTab();renderCollections();renderLogbook();updateYataStatus();updateSyncStatus();if(state.settings.apiKey){}
 if(state.yataFetchedAt)document.getElementById('last-refresh').textContent='YATA data fetched: '+new Date(state.yataFetchedAt).toLocaleString();
 setInterval(()=>{updateYataStatus();updateSyncStatus();},30000);
 if(state.settings.binId&&state.settings.binKey)syncNow();
