@@ -581,7 +581,7 @@ function renderTravelBanner() {
   el.style.display = 'block';
   el.className = 'travel-banner' + (travelStatus.state === 'Abroad' ? ' abroad' : '');
   el.textContent = icon + ' ' + (travelStatus.description || travelStatus.state) + extra;
-  if (dest && plannedCountry !== dest) {
+  if (dest && plannedCountry !== dest && travelStatus.state !== 'Traveling') {
     plannedCountry = dest;
     renderTripPlanner();
   }
