@@ -72,12 +72,6 @@
   .source-me { background: #EAF3DE; color: #27500A; }
   .source-plybur { background: #FDE8D9; color: #8A3D13; }
   .source-hearsay { background: #F1EFE8; color: #5F5E5A; }
-  .status-online { color: #27500A; font-weight: 500; }
-  .status-idle { color: #BA7517; font-weight: 500; }
-  .status-offline { color: #888780; }
-  .status-unreachable { color: #791F1F; font-weight: 500; }
-  .status-line { font-size: 12px; margin-top: 2px; }
-  .status-loading { color: #888780; font-size: 12px; font-style: italic; }
   .log-entry { background: #faf9f5; padding: 14px 16px; border-radius: 8px; border: 1px solid #e8e7e0; margin-bottom: 12px; }
   .log-entry.mine { border-left: 3px solid #534AB7; }
   .log-entry.theirs { border-left: 3px solid #D85A30; }
@@ -109,7 +103,6 @@
   .trip-totals .stat-value.profit { color: #27500A; }
   .trip-totals .stat-value.cost { color: #BA7517; }
   .trip-warning { background: #FAEEDA; color: #633806; padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-top: 10px; }
-  /* Restock timer */
   .restock-panel { background: #fdf9f0; border: 1px solid #d3d1c7; border-radius: 8px; padding: 16px; margin-bottom: 16px; border-left: 3px solid #B07D2E; }
   .restock-panel h3 { margin-top: 0; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
   .restock-outputs { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid #e8e7e0; align-items: flex-end; }
@@ -117,8 +110,6 @@
   .restock-outputs .out-label { font-size: 11px; color: #888780; text-transform: uppercase; letter-spacing: 0.04em; }
   .restock-outputs .out-val { font-size: 15px; font-weight: 500; }
   .restock-outputs .out-val.leave-time { font-size: 24px; color: #534AB7; }
-
-  /* Travel status banner */
   .travel-banner { display:none; font-size:13px; padding:8px 14px; background:#EEF0FA; border:1px solid #C5C9EE; border-radius:8px; margin-bottom:12px; color:#2a2a28; }
   .travel-banner.abroad { background:#EAF3DE; border-color:#A8D18A; }
 </style>
@@ -173,7 +164,6 @@
       <div>
         <label>Arrive this long after restock (min)</label>
         <input type="number" id="rt-buffer" value="5" min="0" max="480" oninput="calcRestock()" />
-        
       </div>
     </div>
     <div class="restock-outputs">
@@ -352,7 +342,6 @@ const DESTINATIONS = [
   { name: 'South Africa', standardMin: 297, yataCodes: ['sou', 'south africa'] }
 ];
 
-
 const YATA_CACHE_MINUTES = 5;
 const PLUSHIE_IDS = ['186','215','187','261','618','258','273','269','266','268','281','274','384'];
 const FLOWER_IDS  = ['260','617','263','272','264','271','267','277','282','276','385'];
@@ -509,8 +498,6 @@ async function commitEditLog(id){const e=state.logbook.find(e=>e.id===id);if(!e)
 function cancelEditLog(id){renderLogbook();}
 function renderLogbook(){const u=document.getElementById('logbook-unconfigured');if(u)u.style.display=state.settings.apiKey?'none':'block';const c=document.getElementById('logbook-entries');if(!c)return;if(!state.logbook.length){c.innerHTML='<div class="empty-state">No entries yet.</div>';return;}const entries=[...state.logbook].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));c.innerHTML=entries.map(e=>{const mine=e.authorKey===state.myKey;const when=new Date(e.timestamp).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});const edited=e.editedAt?'<span class="log-edited">edited '+new Date(e.editedAt).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+'</span>':'';return '<div class="log-entry '+(mine?'mine':'theirs')+'" id="log-entry-'+e.id+'"><div class="log-meta"><span class="log-author">'+escapeHtml(e.authorName)+(mine?' (you)':'')+'</span><span class="log-when">'+when+edited+'</span></div><div class="log-location">'+formatLocation(e.location)+'</div><div class="log-text">'+escapeHtml(e.text)+'</div>'+(mine?'<div class="log-actions"><button class="secondary" onclick="startEditLog('+e.id+')">Edit</button> <button class="danger" onclick="deleteLogEntry('+e.id+')">Delete</button></div>':'')+'</div>';}).join('');}
 
-// ===== TRADER STATUS =====
-
 // ===== JSONBIN =====
 async function jsonbinRead(){if(!state.settings.binId||!state.settings.binKey)return null;const r=await fetch('https://api.jsonbin.io/v3/b/'+state.settings.binId+'/latest',{headers:{'X-Master-Key':state.settings.binKey}});if(!r.ok)throw new Error('JSONBin read failed: '+r.status);return(await r.json()).record;}
 async function jsonbinWrite(){if(!state.settings.binId||!state.settings.binKey)return;const r=await fetch('https://api.jsonbin.io/v3/b/'+state.settings.binId,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':state.settings.binKey},body:JSON.stringify({traders:state.traders,shitlist:state.shitlist,inventory:state.inventory,logbook:state.logbook})});if(!r.ok)throw new Error('JSONBin write failed: '+r.status);}
@@ -560,7 +547,7 @@ async function fetchTravelStatus() {
     const d = await r.json();
     if (d.error) return null;
     const s = d.status || {};
-    travelStatus = { state: s.state, description: s.description, until: s.until || null };
+    travelStatus = { state: s.state, description: s.description, until: s.until > 0 ? s.until : null };
     return travelStatus;
   } catch(e) { return null; }
 }
@@ -585,16 +572,15 @@ function renderTravelBanner() {
   }
   const dest = parseTravelDestination(travelStatus);
   let icon = '✈️';
-  let extra = '';
   if (travelStatus.state === 'Abroad') icon = '🌍';
-  if (travelStatus.state === 'Traveling' && travelStatus.until) {
-    const mins = Math.round((travelStatus.until * 1000 - Date.now()) / 60000);
-if (mins > 0) extra = ' · arriving ' + formatClockTime(new Date(travelStatus.until * 1000));
+  let extra = '';
+  if (travelStatus.until && travelStatus.until > 0) {
+    const arrivalTime = formatClockTime(new Date(travelStatus.until * 1000));
+    extra = ' · arriving ' + arrivalTime;
   }
   el.style.display = 'block';
   el.className = 'travel-banner' + (travelStatus.state === 'Abroad' ? ' abroad' : '');
   el.textContent = icon + ' ' + (travelStatus.description || travelStatus.state) + extra;
-  // Auto-open trip plan
   if (dest && plannedCountry !== dest) {
     plannedCountry = dest;
     renderTripPlanner();
@@ -611,7 +597,8 @@ function switchTab(tab){document.querySelectorAll('.tab').forEach(t=>{t.classLis
 
 load();populateDestDropdown();initSettings();
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
-renderLiveStock();renderTradersTab();renderCollections();renderLogbook();updateYataStatus();updateSyncStatus();if(state.settings.apiKey)fetchTravelStatus().then(renderTravelBanner);
+renderLiveStock();renderTradersTab();renderCollections();renderLogbook();updateYataStatus();updateSyncStatus();
+if(state.settings.apiKey)fetchTravelStatus().then(renderTravelBanner);
 if(state.yataFetchedAt)document.getElementById('last-refresh').textContent='YATA data fetched: '+new Date(state.yataFetchedAt).toLocaleString();
 setInterval(()=>{updateYataStatus();updateSyncStatus();},30000);
 if(state.settings.binId&&state.settings.binKey)syncNow();
