@@ -589,7 +589,7 @@ function renderTravelBanner() {
   if (travelStatus.state === 'Abroad') icon = '🌍';
   if (travelStatus.state === 'Traveling' && travelStatus.until) {
     const mins = Math.round((travelStatus.until * 1000 - Date.now()) / 60000);
-    if (mins > 0) extra = ' · arriving in ' + formatDuration(mins);
+if (mins > 0) extra = ' · arriving ' + formatClockTime(new Date(travelStatus.until * 1000));
   }
   el.style.display = 'block';
   el.className = 'travel-banner' + (travelStatus.state === 'Abroad' ? ' abroad' : '');
